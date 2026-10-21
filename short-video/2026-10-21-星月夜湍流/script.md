@@ -72,4 +72,4 @@
 - **参考**（132–136）：
   - Y. Ma, W. Cheng, S. Huang, F. G. Schmitt, X. Lin, Y. Huang, "Hidden turbulence in van Gogh's *The Starry Night*", *Physics of Fluids* 36(9), 2024
   - J. L. Aragón et al., "Turbulent luminance in impassioned van Gogh paintings", *J. Math. Imaging Vis.*, 2008
-- **出品 + 互动**（136–140）：`@你的抖音号 出品` ／ 你第一次看《星月夜》时，看见的是什么？ / *What did you see, the first time?*
+- **互动**（136–140）：你第一次看《星月夜》时，看见的是什么？ / *What did you see, the first time?*
