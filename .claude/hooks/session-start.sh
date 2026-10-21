@@ -6,6 +6,8 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+echo '{"async": true, "asyncTimeout": 300000}'
+
 # Install the Binance Agentic Wallet CLI (baw) used by the binance-agentic-wallet skill
 if ! command -v baw >/dev/null 2>&1; then
   npm install -g @binance/agentic-wallet
