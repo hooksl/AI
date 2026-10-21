@@ -1,0 +1,329 @@
+/* world.js — 程序化 3D《星月夜》世界 + 跟随相机的背景天幕
+   坐标：y 向上，单位约为米。站在 P0 看向 T0 时，构图对应原画。
+   V.world        THREE.Group（世界根）
+   V.world.set({phase, reveal, opacity})   天空笔触相位 / 出现比例 / 透明度
+   V.world.features  画中漩涡/星/月：{k, u, v, C:Vector3, r（世界半径）, e1, e2（切向基）, n（朝外法向）}
+   V.world.room   病房（窗户在 z=76，室内 z 76..92）
+   V.backdrop.set({opacity, phase})   背景天幕（无限星空漩涡，跟随相机） */
+(function(){
+const D2R = Math.PI/180;
+const P0 = V.P0 = new THREE.Vector3(0, 14, 70);
+const T0 = V.T0 = new THREE.Vector3(0, 52, -60);
+const SR = V.SKY_R = 220;                          // 天空壳半径（以 P0 为球心）
+const AZ_SPAN = 80, EL_TOP = 41.3, EL_SPAN = 50;    // 画面 u∈[0,1] ↔ 方位 80°；v∈[0,0.8] ↔ 仰角 41.3°→-8.7°
+const UNIT = SR * AZ_SPAN * D2R;                    // 画面 1 个 u 单位对应的世界长度（≈307）
+const azOf = u => (u-0.5)*AZ_SPAN*D2R;
+const elOf = v => (EL_TOP - v/0.8*EL_SPAN)*D2R;
+const dirOf = (az, el) => new THREE.Vector3(Math.sin(az)*Math.cos(el), Math.sin(el), -Math.cos(az)*Math.cos(el));
+V.dirUV = (u,v) => dirOf(azOf(u), elOf(v));
+const tangent = n => { const e1 = new THREE.Vector3().crossVectors(n, new THREE.Vector3(0,1,0)).normalize();
+  const e2 = new THREE.Vector3().crossVectors(e1, n).normalize(); return [e1, e2]; };
+
+const W = V.world = new THREE.Group(); W.name = 'world';
+V.scene.add(W);
+const R = V.rng(73692);
+const pick = a => a[Math.floor(R()*a.length)];
+
+/* ---------- 漩涡 / 星 / 月（画面坐标同 2D 版） ---------- */
+const FEAT = [
+  {k:'swirl', u:0.40, v:0.33, r:0.115, s: 1},
+  {k:'swirl', u:0.57, v:0.29, r:0.085, s:-1},
+  {k:'moon',  u:0.88, v:0.12, r:0.075, s: 1},
+  {k:'star',  u:0.06, v:0.10, r:0.045, s: 1},
+  {k:'star',  u:0.21, v:0.06, r:0.040, s:-1},
+  {k:'star',  u:0.31, v:0.17, r:0.035, s: 1},
+  {k:'star',  u:0.48, v:0.09, r:0.040, s:-1},
+  {k:'star',  u:0.67, v:0.09, r:0.045, s: 1},
+  {k:'star',  u:0.76, v:0.23, r:0.040, s:-1},
+  {k:'star',  u:0.95, v:0.33, r:0.035, s: 1},
+  {k:'star',  u:0.71, v:0.41, r:0.034, s:-1},
+  {k:'star',  u:0.28, v:0.42, r:0.030, s: 1},
+];
+// 画外补充的星（相机转动/飞行时可见）
+const EXTRA = [[-0.22,0.05],[-0.12,0.30],[1.12,0.08],[1.22,0.28],[1.05,-0.12],[-0.05,-0.15],[0.35,-0.18],[0.62,-0.2],[0.85,-0.08],[0.15,-0.08]];
+for (const [u,v] of EXTRA) FEAT.push({k:'star', u, v, r:0.03+R()*0.015, s: R()<.5?1:-1, extra:true});
+V.world.features = FEAT.map(f => {
+  const n = V.dirUV(f.u, f.v); const [e1,e2] = tangent(n);
+  return Object.assign({}, f, { n, e1, e2, C: P0.clone().addScaledVector(n, SR), rW: f.r*UNIT });
+});
+
+/* ---------- 天空笔触 ---------- */
+const hz = u => 0.565 + 0.03*Math.sin(u*5+1) + 0.018*Math.sin(u*11+.5);
+const skyItems = [];
+for (let i=0; i<26000 && skyItems.length < 13000; i++){
+  const u = -0.4 + R()*1.8, v = -0.32 + R()*0.95;
+  if (v > hz(u)+0.01) continue;
+  let best=null, bq=1e9;
+  for (const f of V.world.features){ const q = Math.hypot(u-f.u, v-f.v)/f.r; if (q<bq){ bq=q; best=f; } }
+  const n = V.dirUV(u, v), S = P0.clone().addScaledVector(n, SR);
+  const len = (0.013 + R()*0.009)*UNIT, wid = (0.0042 + R()*0.0016)*UNIT, key = R();
+  if (bq < 1.7){
+    const f = best, q = bq, off = S.clone().sub(f.C);
+    const x = off.dot(f.e1), y = off.dot(f.e2);
+    let col;
+    if (f.k==='swirl') col = q<.3 ? pick(V.PAL.pale) : q<.55 ? pick(V.PAL.mid) : q<.8 ? pick(V.PAL.cream) : q<1.1 ? pick(V.PAL.mid) : q<1.4 ? pick(V.PAL.pale) : pick(V.PAL.deep);
+    else if (f.k==='moon') col = q<.75 ? pick(V.PAL.moon) : q<1.1 ? pick(V.PAL.yel) : q<1.4 ? pick(V.PAL.cream) : pick(V.PAL.mid);
+    else col = q<.45 ? pick(V.PAL.cream) : q<.8 ? pick(V.PAL.yel) : q<1.15 ? pick(V.PAL.teal) : q<1.4 ? pick(V.PAL.cream) : pick(V.PAL.mid);
+    skyItems.push({type:0, C:f.C.toArray(), E1:f.e1.toArray(), E2:f.e2.toArray(), d:Math.hypot(x,y), a0:Math.atan2(y,x),
+      w: f.s*(0.10 + 0.22*(1-q/1.7)), len, wid, key, col});
+  } else {
+    const [e1,e2] = tangent(n); const r = R();
+    skyItems.push({type:1, C:S.toArray(), E1:e1.toArray(), E2:e2.toArray(), L:0.07*UNIT, ph:R()*20, speed:(0.004+R()*0.004)*UNIT,
+      len, wid, key, amp:0.010*UNIT, col: r<.78 ? pick(V.PAL.deep) : r<.94 ? pick(V.PAL.mid) : pick(V.PAL.cream)});
+  }
+}
+/* 大漩涡近景细节层：镜头贴近时补足笔触密度（更小、更密、颜色更丰富） */
+{
+  const G = V.world.features[0], G2 = V.world.features[1];
+  for (const [f, cnt] of [[G, 7000], [G2, 3500]]){
+    for (let i=0;i<cnt;i++){
+      const q = Math.sqrt(R())*1.45, a = R()*Math.PI*2, d = q*f.rW;
+      const col = q<.25 ? pick(V.PAL.cream) : q<.5 ? pick([...V.PAL.pale, ...V.PAL.mid]) : q<.75 ? pick([...V.PAL.cream, ...V.PAL.yel]) : q<1.05 ? pick([...V.PAL.mid, ...V.PAL.teal]) : q<1.3 ? pick([...V.PAL.pale, ...V.PAL.deep]) : pick(V.PAL.deep);
+      const sh = (R()-0.5)*6;                                     // 前后错开，飞近时有层次
+      const C = f.C.clone().addScaledVector(f.n, sh);
+      skyItems.push({type:0, C:C.toArray(), E1:f.e1.toArray(), E2:f.e2.toArray(), d, a0:a, w: f.s*(0.10 + 0.22*(1-Math.min(q,1.45)/1.7)),
+        len: (0.006 + R()*0.005)*UNIT, wid: (0.0019 + R()*0.0009)*UNIT, key: R(), col});
+    }
+  }
+}
+const sky = new V.SkyStrokes(skyItems, {renderOrder: 1});
+W.add(sky.mesh);
+
+/* 天空底色：P0 为球心的大球内壁，竖直渐变 */
+const domeMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uCenter: {value: P0}, uOpacity: {value: 1} },
+  vertexShader: `varying vec3 vW; void main(){ vW = (modelMatrix*vec4(position,1.0)).xyz; gl_Position = projectionMatrix*viewMatrix*vec4(vW,1.0); }`,
+  fragmentShader: `uniform vec3 uCenter; uniform float uOpacity; varying vec3 vW;
+    void main(){ vec3 d = normalize(vW - uCenter); float e = d.y;
+      vec3 top = vec3(0.055,0.125,0.31), mid = vec3(0.10,0.21,0.44), low = vec3(0.06,0.10,0.23);
+      vec3 c = e > 0.25 ? mix(mid, top, smoothstep(0.25,0.9,e)) : mix(low, mid, smoothstep(-0.1,0.25,e));
+      gl_FragColor = vec4(c*uOpacity, 1.0); }`,
+});
+const dome = new THREE.Mesh(new THREE.SphereGeometry(SR*1.12, 48, 24), domeMat);
+dome.position.copy(P0); dome.renderOrder = -10; W.add(dome);   // 不透明、最先画、不写深度：永远在最后面
+
+/* 星核光晕 + 月亮 */
+const glow = new V.Strokes(V.world.features.length*2, {additive:true, shape:'glow', renderOrder: 3});
+W.add(glow.mesh);
+const moonCard = V.card({w: 1, h: 1, px: 256, draw(c, Wd, H){
+  const g = c.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0,'rgba(255,236,160,1)'); g.addColorStop(.3,'rgba(245,190,60,1)'); g.addColorStop(.36,'rgba(245,190,60,.55)'); g.addColorStop(1,'rgba(245,190,60,0)');
+  c.fillStyle = g; c.fillRect(0,0,256,256);
+  c.fillStyle = '#f2b52e'; c.beginPath(); c.arc(128,128,40,0,7); c.fill();
+  c.globalCompositeOperation = 'destination-out'; c.fillStyle = 'rgba(0,0,0,.82)';
+  c.beginPath(); c.arc(146,118,33,0,7); c.fill();
+}});
+const moonF = V.world.features[2];
+moonCard.mesh.scale.setScalar(moonF.rW*2.6); moonCard.mesh.position.copy(moonF.C).addScaledVector(moonF.n, -2);
+moonCard.mesh.lookAt(P0); moonCard.mesh.material.depthWrite = false; moonCard.mesh.renderOrder = 4;
+W.add(moonCard.mesh);
+
+/* ---------- 地形：远山 ---------- */
+const ridgeH = x => { const u = 0.5 + Math.atan2(x, 180)/(AZ_SPAN*D2R); const el = elOf(hz(u)); return P0.y + 180*Math.tan(el) - 2; };
+const TX = 900, TZ = 520, NX = 120, NZ = 60;
+const terr = new THREE.PlaneGeometry(TX, TZ, NX, NZ); terr.rotateX(-Math.PI/2); terr.translate(0, 0, -60 - TZ/2);
+const tp = terr.attributes.position, tcol = new Float32Array(tp.count*3);
+const hAt = (x, z) => {
+  const ridge = ridgeH(x) * Math.exp(-(((z+112)/58)**2));
+  const far = (34 + 14*Math.sin(x*0.011+1) + 8*Math.sin(x*0.027)) * V.smooth(V.clamp((-z-160)/140, 0, 1));
+  const roll = 2.2*Math.sin(x*0.05)*Math.sin(z*0.07);
+  return Math.max(0, Math.max(ridge, far) + roll*V.smooth(V.clamp((-z-70)/40,0,1)));
+};
+for (let i=0;i<tp.count;i++){
+  const x = tp.getX(i), z = tp.getZ(i), h = hAt(x,z); tp.setY(i, h);
+  const k = V.clamp(h/40, 0, 1);
+  const c = new THREE.Color().setRGB(V.lerp(0.07,0.15,k), V.lerp(0.10,0.22,k), V.lerp(0.24,0.42,k), THREE.SRGBColorSpace);
+  tcol.set([c.r,c.g,c.b], i*3);
+}
+terr.setAttribute('color', new THREE.BufferAttribute(tcol,3)); terr.computeVertexNormals();
+const terrain = new THREE.Mesh(terr, new THREE.MeshBasicMaterial({vertexColors: true, fog: true}));
+W.add(terrain);
+// 近处地面
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 260).rotateX(-Math.PI/2).translate(0,-0.05,60), new THREE.MeshBasicMaterial({color: 0x0d1736, fog: true}));
+W.add(ground);
+// 山上的笔触（沿等高线方向）
+const hillS = new V.Strokes(2600, {renderOrder: 2});
+for (let i=0;i<2600;i++){
+  const x = -420 + R()*840, z = -60 - R()*400, y = hAt(x,z) + 0.4;
+  const dzdx = (hAt(x+1,z) - hAt(x-1,z))/2;
+  hillS.set(i, x, y, z, 1, dzdx, 0.15*(R()-0.5), 5+R()*5, 1.6+R()*0.8, V.hex(pick(['#1c2f63','#2a4480','#3b5a96','#25386e','#6f8fbf','#1e3a5c'])), 0.9);
+}
+hillS.commit(); W.add(hillS.mesh);
+// 村庄地面上的笔触
+const fieldS = new V.Strokes(1400, {renderOrder: 2});
+for (let i=0;i<1400;i++){
+  const x = -120 + R()*240, z = -110 + R()*150;
+  fieldS.set(i, x, 0.15, z, 1, 0, 0.3*(R()-0.5), 3+R()*3, 1.0+R()*0.6, V.hex(pick(['#16264f','#1f3466','#2a3f75','#24405a','#30486e'])), 0.85);
+}
+fieldS.commit(); W.add(fieldS.mesh);
+
+/* ---------- 村庄与教堂 ---------- */
+const houseMat = [0x2a3b6b, 0x34446e, 0x26355e].map(c => new THREE.MeshBasicMaterial({color: c, fog: true}));
+const roofMat = [0x18223f, 0x1e2a4d].map(c => new THREE.MeshBasicMaterial({color: c, fog: true}));
+const winMat = new THREE.MeshBasicMaterial({color: 0xf2c94c, fog: false});
+const village = new THREE.Group(); W.add(village);
+const winList = [];
+for (let i=0;i<78;i++){
+  const x = -90 + R()*190, z = -108 + R()*82;
+  if (x < -5 && z > -40) continue;
+  const w = 4+R()*5, h = 3+R()*3.5, d = 4+R()*4;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), pick(houseMat)); body.position.set(x, h/2, z); body.rotation.y = (R()-0.5)*0.5;
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.75, h*0.7, 4), pick(roofMat));
+  roof.position.set(0, h/2 + h*0.35, 0); roof.rotation.y = Math.PI/4; roof.scale.set(w/Math.max(w,d), 1, d/Math.max(w,d));
+  body.add(roof);
+  if (R() < 0.75){
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(w*0.22, h*0.32), winMat.clone());
+    win.position.set((R()-0.5)*w*0.4, -h*0.05, d/2+0.05); body.add(win); winList.push({m: win, ph: R()*6.28});
+  }
+  village.add(body);
+}
+// 树丛
+const treeMat = new THREE.MeshBasicMaterial({color: 0x101c22, fog: true});
+for (let i=0;i<40;i++){
+  const t = new THREE.Mesh(new THREE.SphereGeometry(2+R()*2.5, 8, 6), treeMat);
+  t.position.set(-90 + R()*190, 1.5, -110 + R()*90); t.scale.y = 1.3+R()*0.8; village.add(t);
+}
+// 教堂
+const church = new THREE.Group(); church.position.set(14, 0, -58);
+const nave = new THREE.Mesh(new THREE.BoxGeometry(7, 9, 16), new THREE.MeshBasicMaterial({color: 0x22305e, fog: true})); nave.position.y = 4.5; church.add(nave);
+const tower = new THREE.Mesh(new THREE.BoxGeometry(4, 14, 4), new THREE.MeshBasicMaterial({color: 0x26346a, fog: true})); tower.position.set(0, 7, 8); church.add(tower);
+const spire = new THREE.Mesh(new THREE.ConeGeometry(2.6, 20, 4), new THREE.MeshBasicMaterial({color: 0x1d2852, fog: true})); spire.position.set(0, 24, 8); spire.rotation.y = Math.PI/4; church.add(spire);
+village.add(church);
+
+/* ---------- 柏树：火焰般扭动的笔触簇 ---------- */
+const CYP = new THREE.Vector3(-15, 0, 40), CYP_H = 47;
+const cypR = h => 4.6*Math.pow(V.clamp(1 - h/CYP_H, 0, 1), 0.75) * (0.85 + 0.15*Math.sin(h*0.6));
+const cypCore = new THREE.Mesh(new THREE.ConeGeometry(4.2, CYP_H, 12, 8, true), new THREE.MeshBasicMaterial({color: 0x111a16, fog: true}));
+cypCore.position.copy(CYP).add(new THREE.Vector3(0, CYP_H/2, 0)); W.add(cypCore);
+const NC = 1800, cyp = new V.Strokes(NC, {renderOrder: 2}), cypData = [];
+for (let i=0;i<NC;i++){
+  const h = Math.pow(R(), 0.8)*CYP_H, a = R()*Math.PI*2, rr = cypR(h)*(0.75+R()*0.35);
+  cypData.push({h, a, rr, len: 2.4+R()*2.2, wid: 0.75+R()*0.35, col: V.hex(pick(V.PAL.cypress)), ph: R()*6.28});
+}
+function updateCypress(t){
+  for (let i=0;i<NC;i++){
+    const d = cypData[i];
+    const sway = 0.9*Math.sin(t*0.9 + d.h*0.12) * (d.h/CYP_H);       // 越高摆得越大
+    const a = d.a + 0.25*Math.sin(d.h*0.18 + t*0.6);                 // 扭转
+    const x = CYP.x + Math.cos(a)*d.rr + sway, z = CYP.z + Math.sin(a)*d.rr, y = d.h;
+    const lean = 0.35*Math.sin(d.h*0.5 + d.ph + t*1.1);
+    cyp.set(i, x, y, z, lean*Math.cos(a), 1, lean*Math.sin(a), d.len, d.wid, d.col, 1);
+  }
+  cyp.commit();
+}
+W.add(cyp.mesh);
+
+/* ---------- 病房：拱形窗、铁栏、室内 ---------- */
+const room = V.world.room = new THREE.Group(); W.add(room);
+const WIN = V.world.WIN = { z: 76, cx: 0, y0: 8.5, w: 10, h: 13 };   // 窗洞：x∈[-5,5]，y∈[8.5,21.5]，上沿为半圆拱
+{
+  const s = new THREE.Shape(); s.moveTo(-14, 5); s.lineTo(14, 5); s.lineTo(14, 24); s.lineTo(-14, 24); s.lineTo(-14, 5);
+  const hole = new THREE.Path(); const r = WIN.w/2, yA = WIN.y0 + WIN.h - r;
+  hole.moveTo(-r, WIN.y0); hole.lineTo(r, WIN.y0); hole.lineTo(r, yA); hole.absarc(0, yA, r, 0, Math.PI, false); hole.lineTo(-r, WIN.y0);
+  s.holes.push(hole);
+  const wall = new THREE.Mesh(new THREE.ShapeGeometry(s, 32), new THREE.MeshBasicMaterial({color: 0x2c2636, side: THREE.DoubleSide}));
+  wall.position.z = WIN.z; room.add(wall);
+  // 窗洞侧壁（墙厚）
+  const depth = 1.4, frameMat = new THREE.MeshBasicMaterial({color: 0x3d3446, side: THREE.DoubleSide});
+  const sideL = new THREE.Mesh(new THREE.PlaneGeometry(depth, yA - WIN.y0), frameMat); sideL.rotation.y = Math.PI/2; sideL.position.set(-r, (WIN.y0+yA)/2, WIN.z+depth/2); room.add(sideL);
+  const sideR = sideL.clone(); sideR.position.x = r; room.add(sideR);
+  const sill = new THREE.Mesh(new THREE.PlaneGeometry(WIN.w, depth), new THREE.MeshBasicMaterial({color: 0x4a4050, side: THREE.DoubleSide})); sill.rotation.x = -Math.PI/2; sill.position.set(0, WIN.y0, WIN.z+depth/2); room.add(sill);
+  // 铁栏
+  const barMat = new THREE.MeshBasicMaterial({color: 0x1a1612});
+  V.world.bars = new THREE.Group(); room.add(V.world.bars);
+  for (const x of [-3, -1, 1, 3]){
+    const top = yA + Math.sqrt(Math.max(0, r*r - x*x));
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, top - WIN.y0, 8), barMat); b.position.set(x, (top+WIN.y0)/2, WIN.z+0.5); V.world.bars.add(b);
+  }
+  for (const y of [11.5, 14.8, 18.1]){
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, WIN.w, 8), barMat); b.rotation.z = Math.PI/2; b.position.set(0, y, WIN.z+0.5); V.world.bars.add(b);
+  }
+  // 室内：深色墙、地板、床的轮廓、桌上的蜡烛光
+  const inMat = new THREE.MeshBasicMaterial({color: 0x1b1722, side: THREE.DoubleSide});
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(28, 19), inMat); back.position.set(0, 14.5, WIN.z + 18); room.add(back);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(28, 18), new THREE.MeshBasicMaterial({color: 0x16121c, side: THREE.DoubleSide})); ceil.rotation.x = Math.PI/2; ceil.position.set(0, 24, WIN.z + 9); room.add(ceil);
+  for (const x of [-14, 14]){ const sw = new THREE.Mesh(new THREE.PlaneGeometry(18, 19), inMat); sw.rotation.y = Math.PI/2; sw.position.set(x, 14.5, WIN.z + 9); room.add(sw); }
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(28, 18), new THREE.MeshBasicMaterial({color: 0x241c1c})); floor.rotation.x = -Math.PI/2; floor.position.set(0, 5.05, WIN.z+9); room.add(floor);
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(5, 2.2, 10), new THREE.MeshBasicMaterial({color: 0x2e2a3a})); bed.position.set(-9, 6.2, WIN.z+8); room.add(bed);
+  const pillow = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 2), new THREE.MeshBasicMaterial({color: 0x8a8578})); pillow.position.set(-9, 7.6, WIN.z+4); room.add(pillow);
+  const table = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 3), new THREE.MeshBasicMaterial({color: 0x3a2a20})); table.position.set(8.5, 9, WIN.z+5); room.add(table);
+  const easel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 9, 0.3), new THREE.MeshBasicMaterial({color: 0x3a2a20})); easel.position.set(8.5, 9.6, WIN.z+9); easel.rotation.z = 0.12; room.add(easel);
+  V.world.candle = new V.Strokes(2, {additive: true, shape: 'glow', renderOrder: 5}); room.add(V.world.candle.mesh);
+}
+
+/* ---------- 每帧更新 ---------- */
+const worldParams = { phase: null, reveal: 1, opacity: 1 };
+V.world.set = o => Object.assign(worldParams, o);
+const tmp = new THREE.Vector3();
+V.hooks.pre.push((t, act) => {
+  Object.assign(worldParams, { phase: null, reveal: 1, opacity: 1 });
+  W.visible = !!(act && act.useWorld);
+});
+V.hooks.post.push((t, act) => {
+  if (!W.visible) return;
+  const ph = worldParams.phase ?? t;
+  sky.phase = ph; sky.reveal = worldParams.reveal; sky.opacity = worldParams.opacity;
+  // 星核：亮度随出现比例渐入，轻微脉动
+  const k = V.clamp((worldParams.reveal - 0.3)/0.5, 0, 1);
+  V.world.features.forEach((f, i) => {
+    if (f.k === 'swirl'){ glow.hide(i*2); glow.hide(i*2+1); return; }
+    const pulse = 1 + 0.07*Math.sin(t*1.3 + f.u*20);
+    const s = f.rW * (f.k==='moon' ? 1.6 : 1.25) * pulse;
+    tmp.copy(f.C).addScaledVector(f.n, -1);
+    glow.set(i*2, tmp.x, tmp.y, tmp.z, 1, 0, 0, s, s, [1.0, 0.86, 0.45], 0.85*k*worldParams.opacity);
+    glow.set(i*2+1, tmp.x, tmp.y, tmp.z, 1, 0, 0, s*0.42, s*0.42, [1.0, 0.98, 0.88], (f.k==='moon'?0:1)*k*worldParams.opacity);
+  });
+  glow.commit();
+  moonCard.mesh.visible = k > 0.01; moonCard.mesh.material.opacity = k*worldParams.opacity;
+  winList.forEach(w => w.m.material.color.setRGB(0.95, V.lerp(0.62,0.80, 0.5+0.5*Math.sin(t*2+w.ph)), 0.3));
+  updateCypress(t);
+  const cf = 0.85 + 0.15*Math.sin(t*9.3)*Math.sin(t*5.1);
+  V.world.candle.set(0, 8.5, 10.2, WIN.z+5, 1,0,0, 6*cf, 6*cf, [1.0,0.7,0.3], 0.55);
+  V.world.candle.set(1, 8.5, 10.0, WIN.z+5, 1,0,0, 0.5, 1.0, [1.0,0.95,0.7], 1);
+  V.world.candle.commit();
+  domeMat.uniforms.uOpacity.value = worldParams.opacity;
+});
+
+/* ---------- 背景天幕：以相机为中心的无限漩涡星空（非世界镜头使用） ---------- */
+const BR = 700, B = V.backdrop = new THREE.Group(); V.scene.add(B);
+const RB = V.rng(42);
+const bFeat = [];
+for (let i=0;i<46;i++){
+  const az = RB()*Math.PI*2, el = (-35 + RB()*115)*D2R, n = dirOf(az, el);
+  const [e1,e2] = tangent(n);
+  bFeat.push({k: i<14 ? 'swirl' : 'star', n, e1, e2, C: n.clone().multiplyScalar(BR), r: (i<14 ? 0.16+RB()*0.1 : 0.05+RB()*0.03)*BR, s: RB()<.5?1:-1});
+}
+const bItems = [];
+for (let i=0;i<30000 && bItems.length<9000; i++){
+  const az = RB()*Math.PI*2, el = Math.asin(-0.6 + RB()*1.6);
+  const n = dirOf(az, el), S = n.clone().multiplyScalar(BR);
+  let best=null, bq=1e9; for (const f of bFeat){ const q = S.distanceTo(f.C)/f.r; if (q<bq){ bq=q; best=f; } }
+  const len = (9 + RB()*6)*(BR/220)*0.45, wid = (3.2+RB()*1.2)*(BR/220)*0.45, key = RB();
+  if (bq < 1.5){
+    const f = best, off = S.clone().sub(f.C), x = off.dot(f.e1), y = off.dot(f.e2), q = bq;
+    const col = f.k==='swirl' ? (q<.35 ? pick(V.PAL.pale) : q<.7 ? pick(V.PAL.mid) : q<1.0 ? pick(V.PAL.cream) : pick(V.PAL.mid))
+                              : (q<.5 ? pick(V.PAL.cream) : q<.9 ? pick(V.PAL.yel) : pick(V.PAL.teal));
+    bItems.push({type:0, C:f.C.toArray(), E1:f.e1.toArray(), E2:f.e2.toArray(), d:Math.hypot(x,y), a0:Math.atan2(y,x), w:f.s*(0.06+0.14*(1-q/1.5)), len, wid, key, col});
+  } else {
+    const [e1,e2] = tangent(n); const r = RB();
+    bItems.push({type:1, C:S.toArray(), E1:e1.toArray(), E2:e2.toArray(), L:60, ph:RB()*20, speed:3+RB()*3, len, wid, key, amp:3,
+      col: r<.85 ? pick(V.PAL.deep) : r<.97 ? pick(V.PAL.mid) : pick(V.PAL.cream)});
+  }
+}
+const bSky = new V.SkyStrokes(bItems, {renderOrder: -1, opacity: 0.55});
+bSky.mat.depthTest = false;
+B.add(bSky.mesh);
+const bGlow = new V.Strokes(bFeat.length, {additive: true, shape: 'glow', renderOrder: -1, depthTest: false});
+B.add(bGlow.mesh);
+const bParams = { opacity: 1, phase: null };
+V.backdrop.set = o => Object.assign(bParams, o);
+V.hooks.pre.push((t, act) => { Object.assign(bParams, { opacity: 1, phase: null }); B.visible = !(act && (act.useWorld || act.backdrop === false)); });
+V.hooks.post.push((t, act) => {
+  if (!B.visible) return;
+  B.position.copy(V.camera.position);
+  bSky.phase = bParams.phase ?? t; bSky.opacity = 0.55*bParams.opacity;
+  bFeat.forEach((f,i) => { if (f.k==='star') bGlow.set(i, f.C.x, f.C.y, f.C.z, 1,0,0, f.r*1.3, f.r*1.3, [1,0.86,0.45], 0.55*bParams.opacity); else bGlow.hide(i); });
+  bGlow.commit();
+});
+})();

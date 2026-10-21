@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<!--
+  《星月夜的湍流》3D 版 · Vibe知识大赏风格 · 纯代码生成（three.js r158 + Canvas 2D 覆盖层）
+  window.render(t) 纯时间函数；window.setup(done) 等字体加载完成后构建场景。
+  预览：python3 tools/preview.py index.html out/ 2 10 24 ...   渲染：python3 tools/render.py
+-->
+<title>星月夜的湍流 · 3D</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #070b1e; }
+  #stage { position: relative; width: 1920px; height: 1080px; }
+  canvas { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+  #gl { z-index: 1; } #ov { z-index: 20; }
+  #toplabel { position: absolute; top: 44px; left: 0; right: 0; z-index: 30; text-align: center;
+    font: 500 30px 'Noto Sans SC','Noto Sans CJK SC','PingFang SC','Microsoft YaHei',sans-serif;
+    color: #A8A8BE; letter-spacing: 6px; text-shadow: 0 2px 14px rgba(0,0,0,.95); }
+  #annotation { position: absolute; top: 756px; left: 0; right: 0; z-index: 30; text-align: center;
+    font: 400 27px 'Noto Sans SC','Noto Sans CJK SC','PingFang SC','Microsoft YaHei',sans-serif;
+    color: #A8A8BE; text-shadow: 0 2px 14px rgba(0,0,0,.95), 0 0 4px rgba(0,0,0,.9); }
+  #subtitle { position: absolute; top: 906px; left: 0; right: 0; z-index: 40; text-align: center;
+    font: 700 46px 'Noto Sans SC','Noto Sans CJK SC','PingFang SC','Microsoft YaHei',sans-serif;
+    color: #EAEAF2; letter-spacing: 1px; text-shadow: 0 2px 24px rgba(0,0,0,.95), 0 0 6px rgba(0,0,0,.85); }
+  #subtitle em { font-style: normal; color: #E8C547; }
+  #subtitle-en { position: absolute; top: 972px; left: 0; right: 0; z-index: 40; text-align: center;
+    font: italic 400 28px 'EB Garamond', Georgia, serif; color: #A8A8BE; letter-spacing: .5px;
+    text-shadow: 0 2px 12px rgba(0,0,0,.95); }
+  #titlecard { position: absolute; inset: 0; z-index: 50; display: none;
+    align-items: center; justify-content: center; flex-direction: column; gap: 26px; }
+  #titlecard .series { font: 500 24px 'Noto Sans SC','Noto Sans CJK SC',sans-serif; color: rgba(232,197,71,.8); letter-spacing: 14px; text-indent: 14px; }
+  #titlecard .name { font: 900 112px 'Noto Serif SC','Noto Serif CJK SC','Songti SC',serif; color: #E8C547; letter-spacing: 6px;
+    text-shadow: 0 4px 40px rgba(232,197,71,.35), 0 0 12px rgba(0,0,0,.8); }
+  #titlecard .q { font: 500 34px 'Noto Sans SC','Noto Sans CJK SC',sans-serif; color: #EAEAF2; margin-top: 14px; text-shadow: 0 2px 16px rgba(0,0,0,.9); }
+  #titlecard .q-en { font: italic 400 28px 'EB Garamond', Georgia, serif; color: #A8A8BE; text-shadow: 0 2px 12px rgba(0,0,0,.9); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl" width="1920" height="1080"></canvas>
+  <canvas id="ov" width="1920" height="1080"></canvas>
+  <div id="toplabel"></div>
+  <div id="annotation"></div>
+  <div id="subtitle"></div>
+  <div id="subtitle-en"></div>
+  <div id="titlecard"><div class="series">VIBE知识大赏</div><div class="name"></div><div class="q"></div><div class="q-en"></div></div>
+</div>
+<script src="vendor/three.min.js"></script>
+<script src="core.js"></script>
+<script src="world.js"></script>
+<script src="paint2d.js"></script>
+<script src="overlay.js"></script>
+<!-- 各镜头：每个文件 V.shot({...}) 注册一个时间段 -->
+<script src="shots/s01_open.js"></script>      <!--   0–20  开场：画变成世界，飞入大漩涡 + 标题 -->
+<script src="shots/s03_window.js"></script>    <!--  20–34  病房窗户 → 飞出窗外 → 漩涡标记 -->
+<script src="shots/s04_poem.js"></script>      <!--  34–46  理查森的小诗 -->
+<script src="shots/s05_cascade.js"></script>   <!--  46–54  能量级联 -->
+<script src="shots/s06_kolmogorov.js"></script><!--  54–62  柯尔莫哥洛夫 -->
+<script src="shots/s07_spectrum.js"></script>  <!--  62–71  −5/3 频谱 -->
+<script src="shots/s08_gallery.js"></script>   <!--  71–83  2006 对照 -->
+<script src="shots/s09_measure.js"></script>   <!--  83–91  2024 论文 + 测量 -->
+<script src="shots/s10_data.js"></script>      <!--  91–114 数据频谱 + −1 + 颜料混合 -->
+<script src="shots/s11_ns.js"></script>        <!-- 114–121 纳维-斯托克斯 -->
+<script src="shots/s12_end.js"></script>       <!-- 121–140 回到窗口 + 结尾 -->
+<script>
+/* 浏览器实时预览（?t=秒 从指定时间开始）。渲染管线设 __RENDER_MODE__ 后停止。 */
+window.setup(() => {
+  const t0 = performance.now(), start = parseFloat(new URLSearchParams(location.search).get('t') || '0');
+  (function loop(){ if (window.__RENDER_MODE__) return; window.render((start + (performance.now()-t0)/1000) % V.DURATION); requestAnimationFrame(loop); })();
+});
+</script>
+</body>
+</html>
