@@ -257,7 +257,7 @@ V.drawSeal = function(c, x, y, text, k=1, size=30){
 V.card = function(o){
   const px = o.px || 1024, W = px, H = Math.round(px * o.h / o.w);
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const c = cv.getContext('2d');
+  const c = cv.getContext('2d', {willReadFrequently: true});   // 强制软件光栅：避免 Chrome 按重绘历史切换 GPU/CPU 路径导致同一 t 像素不一致
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   const mat = new THREE.MeshBasicMaterial({map: tex, transparent: true, side: o.doubleSide === false ? THREE.FrontSide : THREE.DoubleSide, depthWrite: o.depthWrite ?? true, fog: o.fog ?? false});

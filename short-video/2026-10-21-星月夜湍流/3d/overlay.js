@@ -68,30 +68,56 @@ V.CUTS = [20, 34, 46, 54, 62, 71, 83, 91, 114, 121];
 const $ = id => document.getElementById(id);
 const ov = $('ov'), oc = ov.getContext('2d');
 
-/* 笔触扫屏：一阵旋转的星月夜笔触覆盖整屏再散开 */
+/* 笔触扫屏：一股星月夜笔触组成的旋流从画面一侧卷过另一侧，在切换时刻刚好盖满全屏
+   每根笔触沿以画外某点为中心的大圆弧运动（有方向感），两端收尖、带刷毛纹理。 */
+const WIPE_HALF = 0.32;
 const WIPE = (() => { const r = V.rng(777), a = [];
-  for (let i=0;i<1100;i++){ const x = r()*2100-90, y = r()*1260-90; a.push({x, y, k: r(), len: 90+r()*120, wid: 26+r()*22,
-    col: r()<.62 ? V.PAL.deep[Math.floor(r()*5)] : r()<.8 ? V.PAL.mid[Math.floor(r()*3)] : r()<.93 ? V.PAL.pale[Math.floor(r()*3)] : V.PAL.yel[Math.floor(r()*3)], ph: r()*6.28}); }
+  for (let i=0;i<950;i++){
+    const lane = r();                                   // 0..1：旋流的径向位置（决定半径）
+    a.push({ lane, th0: r(), len: 170+r()*170, wid: 26+r()*18, ph: r()*6.28, k: r(),
+      col: r()<.55 ? V.PAL.deep[Math.floor(r()*5)] : r()<.78 ? V.PAL.mid[Math.floor(r()*3)] : r()<.92 ? V.PAL.pale[Math.floor(r()*3)] : V.PAL.yel[Math.floor(r()*3)] });
+  }
   return a; })();
-function drawWipe(t){
-  let best = null; for (const c of V.CUTS) if (Math.abs(t - c) < 0.42) best = c;
-  if (best === null) return;
-  const p = (t - best + 0.42)/0.84;                    // 0→1，0.5 为切换时刻
-  const cover = p < 0.5 ? easeInOut(p/0.5) : 1 - easeInOut((p-0.5)/0.5);
-  const dirSign = (V.CUTS.indexOf(best) % 2) ? -1 : 1;
-  oc.save(); oc.lineCap = 'round';
-  for (const s of WIPE){
-    if (s.k > cover*1.08) continue;
-    // 以画面中心为涡心的旋流场
-    const dx = s.x - 960, dy = s.y - 540, rr = Math.hypot(dx, dy) + 1;
-    const ang = Math.atan2(dy, dx) + dirSign*(Math.PI/2 + 0.25) + 0.6*Math.sin(s.ph + t*3);
-    const sweep = dirSign*(p-0.5)*260;
-    const x = s.x + Math.cos(ang)*sweep*0.4, y = s.y + Math.sin(ang)*sweep*0.4;
-    oc.strokeStyle = s.col; oc.lineWidth = s.wid;
-    oc.globalAlpha = clamp((cover*1.08 - s.k)*6, 0, 1);
-    oc.beginPath(); oc.moveTo(x - Math.cos(ang)*s.len/2, y - Math.sin(ang)*s.len/2); oc.lineTo(x + Math.cos(ang)*s.len/2, y + Math.sin(ang)*s.len/2); oc.stroke();
+const shade = (hex, k) => { const [r,g,b] = V.hex(hex); return `rgb(${Math.round(V.clamp(r*k,0,1)*255)},${Math.round(V.clamp(g*k,0,1)*255)},${Math.round(V.clamp(b*k,0,1)*255)})`; };
+function brushStroke(x, y, ang, len, wid, col, a, seed){
+  oc.save(); oc.translate(x, y); oc.rotate(ang); oc.globalAlpha = a;
+  const L = len/2, Wd = wid/2;
+  oc.fillStyle = col;
+  oc.beginPath();                                       // 起笔钝圆、收笔渐尖（带一点飞白）
+  oc.moveTo(-L + Wd, -Wd);
+  oc.bezierCurveTo(-L*0.1, -Wd*1.05, L*0.55, -Wd*0.7, L, -Wd*0.05);
+  oc.lineTo(L*0.92, Wd*0.25);
+  oc.bezierCurveTo(L*0.5, Wd*0.85, -L*0.1, Wd*1.02, -L + Wd, Wd);
+  oc.arc(-L + Wd, 0, Wd, Math.PI/2, Math.PI*1.5);
+  oc.fill();
+  oc.lineCap = 'round';                                 // 刷毛：几道深浅细线
+  for (let b=0;b<3;b++){
+    const yy = (b-1)*Wd*0.55 + Math.sin(seed*7+b)*Wd*0.12;
+    oc.strokeStyle = b===1 ? shade(col, 1.22) : shade(col, 0.72); oc.lineWidth = Math.max(2, wid*0.09);
+    oc.globalAlpha = a*0.55;
+    oc.beginPath(); oc.moveTo(-L*0.75, yy); oc.lineTo(L*0.8, yy*0.7); oc.stroke();
   }
   oc.restore();
+}
+function drawWipe(t){
+  let best = null; for (const c of V.CUTS) if (Math.abs(t - c) < WIPE_HALF) best = c;
+  if (best === null) return;
+  const p = (t - best + WIPE_HALF)/(2*WIPE_HALF);         // 0→1，0.5 为切换时刻
+  const cover = p < 0.5 ? V.smooth(p/0.5) : 1 - V.smooth((p-0.5)/0.5);
+  const idx = V.CUTS.indexOf(best), dir = idx % 2 ? -1 : 1;
+  // 旋流中心在画外下方（左右交替），笔触沿大圆弧扫过画面
+  const cx = 960 - dir*1500, cy = 1900, R0 = 1250, R1 = 2900;
+  const sweep = (p - 0.5)*0.55;                          // 整体角速度：笔触在 0.64s 内扫过约 0.55 弧度
+  const base = Math.atan2(540 - cy, 960 - cx);
+  for (const s of WIPE){
+    if (s.k > cover*1.12) continue;
+    const r = R0 + s.lane*(R1 - R0);
+    const th = base + (s.th0 - 0.5)*1.1*(1600/r) + dir*sweep*(1.4 - s.lane*0.6);
+    const x = cx + Math.cos(th)*r, y = cy + Math.sin(th)*r;
+    if (x < -200 || x > 2120 || y < -200 || y > 1280) continue;
+    const ang = th + Math.PI/2 + 0.18*Math.sin(s.ph + t*4);
+    brushStroke(x, y, ang, s.len, s.wid, s.col, V.clamp((cover*1.12 - s.k)*7, 0, 1), s.ph);
+  }
 }
 
 function drawVignette(){

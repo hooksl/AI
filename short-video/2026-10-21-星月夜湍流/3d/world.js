@@ -178,12 +178,51 @@ for (let i=0;i<78;i++){
   }
   village.add(body);
 }
+// 房屋笔触层：墙面、屋顶、窗光（静态，按房屋自身的旋转摆放）
+const houseS = [];
+const addHouseStrokes = (x0, z0, rot, w, h, d, wallPal, roofPal, win) => {
+  const cr = Math.cos(rot), sr = Math.sin(rot);
+  const P = (lx, ly, lz) => [x0 + lx*cr + lz*sr, ly, z0 - lx*sr + lz*cr];
+  const Dv = (dx, dy, dz) => [dx*cr + dz*sr, dy, -dx*sr + dz*cr];
+  const nW = Math.round(w*h*1.6), nS = Math.round(d*h*0.9), nR = Math.round(w*d*0.7);
+  for (let i=0;i<nW;i++){ const lx = (R()-0.5)*w*0.96, ly = 0.3 + R()*(h-0.5);       // 正面（+z，朝向原画视点）
+    houseS.push([...P(lx, ly, d/2+0.06), ...Dv(1, (R()-0.5)*0.5, 0), 0.9+R()*0.8, 0.32+R()*0.14, pick(wallPal)]); }
+  for (let i=0;i<nS;i++){ const lz = (R()-0.5)*d*0.96, ly = 0.3 + R()*(h-0.5), sx = R()<.5 ? -1 : 1;   // 侧面
+    houseS.push([...P(sx*(w/2+0.06), ly, lz), ...Dv(0, (R()-0.5)*0.5, 1), 0.9+R()*0.8, 0.32+R()*0.14, pick(wallPal)]); }
+  for (let i=0;i<nR;i++){ const lx = (R()-0.5)*w*0.9, k = R(), lz = (R()<.5?-1:1)*(1-k)*d*0.5;           // 屋顶两坡
+    houseS.push([...P(lx*(1-k*0.6), h + k*h*0.7 + 0.08, lz), ...Dv(1, 0, 0), 0.8+R()*0.7, 0.3+R()*0.12, pick(roofPal)]); }
+  if (win) houseS.push([...P(win[0], h/2 + win[1], d/2+0.1), ...Dv(0, 1, 0), win[2]*1.2, win[3]*1.3, '#f2c94c']);
+};
+village.children.forEach(body => {
+  const g = body.geometry && body.geometry.parameters; if (!g || g.width === undefined) return;   // 跳过教堂（Group）
+  const win = body.children.find(c => c.geometry && c.geometry.type === 'PlaneGeometry');
+  addHouseStrokes(body.position.x, body.position.z, body.rotation.y, g.width, g.height, g.depth,
+    ['#2a3b6b','#34446e','#3c5080','#26355e','#4a5c88','#2f4272'], ['#18223f','#1e2a4d','#243258','#141c36'],
+    win ? [win.position.x, win.position.y, win.geometry.parameters.width, win.geometry.parameters.height] : null);
+});
+{ // 教堂
+  const pal = ['#22305e','#2a3a6e','#1d2852','#34467c'];
+  for (let i=0;i<260;i++){ const x = 14 + (R()-0.5)*6.8, y = 0.4 + R()*8.4; houseS.push([x, y, -58+8.06, 1, (R()-0.5)*0.4, 0, 0.9+R()*0.7, 0.32+R()*0.12, pick(pal)]); }
+  for (let i=0;i<160;i++){ const y = 0.4 + R()*13.4, x = 14 + (R()-0.5)*3.9; houseS.push([x, y, -58+8+2.06, 0, 1, 0, 0.9+R()*0.6, 0.3+R()*0.1, pick(pal)]); }
+  for (let i=0;i<140;i++){ const k = R(), y = 14 + k*20, r = 2.6*(1-k)*0.95, a = (R()-0.5)*1.4; houseS.push([14 + Math.sin(a)*r, y, -58+8 + Math.cos(a)*r + 0.05, 0, 1, 0, 1.0+R()*0.8, 0.28, pick(['#1d2852','#26346a','#30407a'])]); }
+}
+const villS = new V.Strokes(houseS.length, {renderOrder: 2});
+houseS.forEach((p, i) => villS.set(i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], V.hex(p[8]), p[8] === '#f2c94c' ? 0.95 : 0.92));
+villS.commit(); W.add(villS.mesh);
 // 树丛
 const treeMat = new THREE.MeshBasicMaterial({color: 0x101c22, fog: true});
+const treeList = [];
 for (let i=0;i<40;i++){
   const t = new THREE.Mesh(new THREE.SphereGeometry(2+R()*2.5, 8, 6), treeMat);
   t.position.set(-90 + R()*190, 1.5, -110 + R()*90); t.scale.y = 1.3+R()*0.8; village.add(t);
+  treeList.push(t);
 }
+{ const ts = [];
+  treeList.forEach(t => { const r = t.geometry.parameters.radius, sy = t.scale.y;
+    for (let i=0;i<34;i++){ const a = R()*Math.PI*2, h = (R()-0.3)*r*sy;
+      ts.push([t.position.x + Math.cos(a)*r*0.95, t.position.y + h, t.position.z + Math.sin(a)*r*0.95, (R()-0.5)*0.6, 1, (R()-0.5)*0.6, 0.9+R()*0.8, 0.34+R()*0.12, pick(['#14241e','#1c3028','#22382a','#2a3a34','#10201a'])]); } });
+  const treeS = new V.Strokes(ts.length, {renderOrder: 2});
+  ts.forEach((p, i) => treeS.set(i, ...p.slice(0, 8), V.hex(p[8]), 0.95)); treeS.commit(); W.add(treeS.mesh); }
 // 教堂
 const church = new THREE.Group(); church.position.set(14, 0, -58);
 const nave = new THREE.Mesh(new THREE.BoxGeometry(7, 9, 16), new THREE.MeshBasicMaterial({color: 0x22305e, fog: true})); nave.position.y = 4.5; church.add(nave);
@@ -196,10 +235,11 @@ const CYP = new THREE.Vector3(-15, 0, 40), CYP_H = 47;
 const cypR = h => 4.6*Math.pow(V.clamp(1 - h/CYP_H, 0, 1), 0.75) * (0.85 + 0.15*Math.sin(h*0.6));
 const cypCore = new THREE.Mesh(new THREE.ConeGeometry(4.2, CYP_H, 12, 8, true), new THREE.MeshBasicMaterial({color: 0x111a16, fog: true}));
 cypCore.position.copy(CYP).add(new THREE.Vector3(0, CYP_H/2, 0)); W.add(cypCore);
-const NC = 1800, cyp = new V.Strokes(NC, {renderOrder: 2}), cypData = [];
+const NC = 4200, cyp = new V.Strokes(NC, {renderOrder: 2}), cypData = [];
 for (let i=0;i<NC;i++){
-  const h = Math.pow(R(), 0.8)*CYP_H, a = R()*Math.PI*2, rr = cypR(h)*(0.75+R()*0.35);
-  cypData.push({h, a, rr, len: 2.4+R()*2.2, wid: 0.75+R()*0.35, col: V.hex(pick(V.PAL.cypress)), ph: R()*6.28});
+  const h = Math.pow(R(), 0.8)*CYP_H, a = R()*Math.PI*2, rr = cypR(h)*(0.72+R()*0.38);
+  const big = i < 900;                                    // 少量大笔触打底，其余为细笔触，近看不糊
+  cypData.push({h, a, rr, len: big ? 2.6+R()*2.0 : 1.3+R()*1.5, wid: big ? 0.8+R()*0.3 : 0.42+R()*0.26, col: V.hex(pick(V.PAL.cypress)), ph: R()*6.28});
 }
 function updateCypress(t){
   for (let i=0;i<NC;i++){
@@ -246,7 +286,7 @@ const WIN = V.world.WIN = { z: 76, cx: 0, y0: 8.5, w: 10, h: 13 };   // 窗洞�
   for (const x of [-14, 14]){ const sw = new THREE.Mesh(new THREE.PlaneGeometry(18, 19), inMat); sw.rotation.y = Math.PI/2; sw.position.set(x, 14.5, WIN.z + 9); room.add(sw); }
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(28, 18), new THREE.MeshBasicMaterial({color: 0x241c1c})); floor.rotation.x = -Math.PI/2; floor.position.set(0, 5.05, WIN.z+9); room.add(floor);
   const bed = new THREE.Mesh(new THREE.BoxGeometry(5, 2.2, 10), new THREE.MeshBasicMaterial({color: 0x2e2a3a})); bed.position.set(-9, 6.2, WIN.z+8); room.add(bed);
-  const pillow = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 2), new THREE.MeshBasicMaterial({color: 0x8a8578})); pillow.position.set(-9, 7.6, WIN.z+4); room.add(pillow);
+  const pillow = new THREE.Mesh(new THREE.BoxGeometry(4, 0.8, 2), new THREE.MeshBasicMaterial({color: 0x4e4a44})); pillow.position.set(-9, 7.6, WIN.z+4); room.add(pillow);
   const table = new THREE.Mesh(new THREE.BoxGeometry(4, 0.4, 3), new THREE.MeshBasicMaterial({color: 0x3a2a20})); table.position.set(8.5, 9, WIN.z+5); room.add(table);
   const easel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 9, 0.3), new THREE.MeshBasicMaterial({color: 0x3a2a20})); easel.position.set(8.5, 9.6, WIN.z+9); easel.rotation.z = 0.12; room.add(easel);
   V.world.candle = new V.Strokes(2, {additive: true, shape: 'glow', renderOrder: 5}); room.add(V.world.candle.mesh);
