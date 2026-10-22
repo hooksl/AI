@@ -371,7 +371,7 @@ V.shot({ id: 's06', start: 54, end: 62, origin: [16000, 0, 0],
 
     /* ---- 铭牌 ---- */
     {
-      const k = P(t, 54.25, 55.15);
+      const k = P(t, 53.6, 54.5);                       // 提前出现：转场融合时铭牌已在画面里
       s.plqHinge.rotation.x = lerp(-Math.PI/2, 0, clamp(easeOutBack(k), 0, 1.15));
       const op = clamp(k*4, 0, 1);
       s.plq.opacity = op; s.slab.material.opacity = op; s.legS.opacity = op;

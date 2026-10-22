@@ -4,7 +4,7 @@
 (function(){
 const V = window.V = {};
 V.lib = {};                 // 镜头之间共享的组件（例如 s07 定义的 3D 坐标图，s10 复用）
-V.W = 1920; V.H = 1080; V.FPS = 30; V.DURATION = 140;
+V.W = 1920; V.H = 1080; V.FPS = 30; V.DURATION = 136;
 
 /* ---------- 配色与字体 ---------- */
 V.COL = { gold:'#E8C547', ink:'#EAEAF2', dim:'#9A9AB0', paper:'#EDE4D3', seal:'#B53A2F', night:'#070b1e', blue:'#6FA8FF' };

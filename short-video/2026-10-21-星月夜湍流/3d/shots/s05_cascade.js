@@ -94,7 +94,7 @@ V.shot({ id: 's05', start: 46, end: 54, origin: [12000, 0, 0],
       ED.push({ lvl, C, n, e1, e2, R: Rr, dir, t0, dur, om: LV[lvl].om, src, k: 0 });
       return ED.length - 1;
     };
-    addEddy(0, BIG.C, BIG.n, BIG.R, 1, 46.15, 0.85, -1);
+    addEddy(0, BIG.C, BIG.n, BIG.R, 1, 45.45, 0.85, -1);   // 提前出现：转场融合时进入画面已有大涡
     MID.forEach((m, j) => addEddy(1, m.C, m.n, 4.4, j%2 ? 1 : -1, 47.25 + j*0.1, 0.8, 0));
     SMALL.forEach(([C, pj], j) => addEddy(2, C, v3(Math.sin(j*2.1)*0.45, Math.cos(j*1.7)*0.3, 1), 2.05, j%2 ? -1 : 1, 48.25 + (j%3)*0.08 + pj*0.05, 0.7, 1 + pj));
 

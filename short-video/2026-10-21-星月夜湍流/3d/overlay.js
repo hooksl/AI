@@ -37,7 +37,7 @@ V.SUBTITLES = [
   [117.5, 121.5,'描述它的纳维-斯托克斯方程，悬赏 100 万美元', 'Navier–Stokes: a million-dollar Millennium Prize problem.'],
   [121.5, 124.5,'梵高没算过一行公式', 'Van Gogh never wrote an equation.'],
   [124.5, 128.0,'他只是，比所有人都更用力地看过天空', 'He just looked at the sky harder than anyone.'],
-  [136.0, 139.6,'你第一次看《星月夜》时，看见的是什么？', 'What did you see, the first time?'],
+  [130.2, 134.8,'你第一次看《星月夜》时，看见的是什么？', 'What did you see, the first time?'],
 ];
 V.TITLE_CARD = [15, 20, '《星月夜的湍流》', '梵高画下的，是物理学最难的问题之一', "The Turbulence in Van Gogh's Sky"];
 /* 章节：[起秒, 顶部标签, 画面注释] —— 各镜头可在 build 里通过 V.setSection 覆盖自己时间段内的注释 */
@@ -66,7 +66,7 @@ V.setSection = (t0, label, note) => { const s = V.SECTIONS.find(s => s[0] === t0
 V.CUTS = [20, 34, 46, 54, 62, 71, 83, 91, 114, 121];
 
 const $ = id => document.getElementById(id);
-const ov = $('ov'), oc = ov.getContext('2d');
+const ov = $('ov'), oc = ov.getContext('2d', {willReadFrequently: true});   // 软件光栅：文字抗锯齿不随渲染历史变化
 
 /* 笔触扫屏：一股星月夜笔触组成的旋流从画面一侧卷过另一侧，在切换时刻刚好盖满全屏
    每根笔触沿以画外某点为中心的大圆弧运动（有方向感），两端收尖、带刷毛纹理。 */
@@ -213,7 +213,7 @@ function drawEndCards(t){
       .forEach((s,i)=> V.txt(oc, s, 960, 380 + i*62, `500 34px ${F.SANS}`, C.ink));
     V.txt(oc, 'Statistics of brightness, not a claim that the painting is a fluid.', 960, 580, `italic 26px ${F.GARA}`, C.dim);
     oc.restore(); }
-  const r = vis(t, 129, 135.2, 0.6, 0.6);
+  const r = 0;                                   // 参考卡已按用户要求去掉
   if (r>0){ oc.save(); oc.globalAlpha = r;
     oc.fillStyle = 'rgba(8,10,24,.80)'; V.roundRect(oc, 260, 230, 1400, 420, 8); oc.fill();
     oc.strokeStyle = 'rgba(232,197,71,.7)'; oc.lineWidth = 1.5; V.roundRect(oc, 260, 230, 1400, 420, 8); oc.stroke();

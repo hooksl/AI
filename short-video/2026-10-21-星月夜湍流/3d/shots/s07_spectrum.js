@@ -545,7 +545,7 @@ V.shot({ id: 's07', start: 62, end: 71, origin: [20000, 0, 0],
     ch.frame(t, { axes: E(t, 61.7, 62.9), grid: E(t, 61.6, 62.6), alpha: A });
     /* ---------- 金色 −5/3 直线 ---------- */
     const gold = V.hex(V.COL.gold);
-    const prog = easeOut(P(t, 62.4, 65.4))*0.85 + 0.15*P(t, 62.4, 65.4);
+    const prog = easeOut(P(t, 62.1, 65.4))*0.85 + 0.15*P(t, 62.1, 65.4);
     s.line.set({ prog, alpha: A, color: () => [gold[0]*1.05, gold[1]*1.02, gold[2]*0.9], halo: () => 0.85 + 0.15*Math.sin(t*2.2), head: 1, glowK: 0.17, haloK: 0.5 });
     /* ---------- 金点 + 斜率标签 ---------- */
     const kd = E(t, 64.6, 65.6);
