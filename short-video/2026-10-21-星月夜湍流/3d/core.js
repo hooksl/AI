@@ -56,6 +56,18 @@ V.keys = function(t, keys, ease=V.easeInOut){
     return V.lerp(a,b,k);
   }
 };
+/* 速度连续的时间关键帧插值（三次 Hermite + Catmull-Rom 切线）：keys = [[t, [x,y,z,...]], ...]，返回数组 */
+V.keysSmooth = function(t, K){
+  const n = K.length;
+  if (t <= K[0][0]) return K[0][1].slice();
+  if (t >= K[n-1][0]) return K[n-1][1].slice();
+  let i = 0; while (t > K[i+1][0]) i++;
+  const [t0, p0] = K[i], [t1, p1] = K[i+1], dt = t1 - t0, s = (t - t0)/dt;
+  const tan = j => { const a = K[Math.max(0, j-1)], b = K[Math.min(n-1, j+1)]; return a[1].map((v, k) => (b[1][k] - v)/(b[0] - a[0])); };
+  const m0 = tan(i), m1 = tan(i+1), s2 = s*s, s3 = s2*s;
+  const h00 = 2*s3 - 3*s2 + 1, h10 = s3 - 2*s2 + s, h01 = -2*s3 + 3*s2, h11 = s3 - s2;
+  return p0.map((v, k) => h00*v + h10*dt*m0[k] + h01*p1[k] + h11*dt*m1[k]);
+};
 /* 平滑样条：points 为 Vector3 数组，返回 u∈[0,1] → Vector3 */
 V.spline = function(points, tension=0.5){
   const c = new THREE.CatmullRomCurve3(points, false, 'catmullrom', tension);
@@ -65,7 +77,8 @@ V.spline = function(points, tension=0.5){
 /* ---------- 渲染器 ---------- */
 const glCanvas = document.getElementById('gl');
 V.renderer = new THREE.WebGLRenderer({canvas: glCanvas, antialias: true, preserveDrawingBuffer: true, powerPreference: 'high-performance'});
-V.renderer.setPixelRatio(1);
+V.PR = parseFloat(new URLSearchParams(location.search).get('pr') || '1');   // ?pr=0.5 → 半分辨率快速预览版
+V.renderer.setPixelRatio(V.PR);
 V.renderer.setSize(V.W, V.H, false);
 V.renderer.setClearColor(0x070b1e, 1);
 V.scene = new THREE.Scene();

@@ -292,6 +292,189 @@ const WIN = V.world.WIN = { z: 76, cx: 0, y0: 8.5, w: 10, h: 13 };   // 窗洞�
   V.world.candle = new V.Strokes(2, {additive: true, shape: 'glow', renderOrder: 5}); room.add(V.world.candle.mesh);
 }
 
+/* ---------- 湖：村庄西侧，水面笔触 + 随相机计算的星光倒影 ---------- */
+const LAKE = V.world.LAKE = { x: -112, z: 30, rx: 52, rz: 38 };
+const inLake = (x, z, m=1) => ((x-LAKE.x)/(LAKE.rx*m))**2 + ((z-LAKE.z)/(LAKE.rz*m))**2 < 1;
+{
+  const g = new THREE.CircleGeometry(1, 64); g.rotateX(-Math.PI/2);
+  const lake = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color: 0x0c1c48, fog: true}));
+  lake.scale.set(LAKE.rx, 1, LAKE.rz); lake.position.set(LAKE.x, 0.05, LAKE.z); W.add(lake);
+}
+const RL = V.rng(5150), pickL = a => a[Math.floor(RL()*a.length)];
+const ripData = [];
+for (let i=0; ripData.length < 3200 && i < 20000; i++){
+  const x = LAKE.x + (RL()*2-1)*LAKE.rx, z = LAKE.z + (RL()*2-1)*LAKE.rz;
+  if (!inLake(x, z, 0.97)) continue;
+  const r = RL();
+  ripData.push({x, z, ph: RL()*6.28, len: 1.4+RL()*1.8, wid: 0.22+RL()*0.12,
+    col: V.hex(r<.6 ? pickL(V.PAL.deep) : r<.9 ? pickL(V.PAL.mid) : pickL(V.PAL.pale))});
+}
+const ripS = new V.Strokes(ripData.length, {renderOrder: 2}); W.add(ripS.mesh);
+const REFL_N = 12, reflS = new V.Strokes(V.world.features.length*REFL_N, {renderOrder: 3}); W.add(reflS.mesh);
+const reflJit = Array.from({length: V.world.features.length*REFL_N}, () => [RL(), RL(), RL()]);
+// 湖岸芦苇
+const reedData = [];
+for (let i=0;i<900;i++){ const a = RL()*Math.PI*2, m = 0.97 + RL()*0.09;
+  if (RL() < 0.35) continue;
+  reedData.push({x: LAKE.x + Math.cos(a)*LAKE.rx*m, z: LAKE.z + Math.sin(a)*LAKE.rz*m, h: 1.0+RL()*1.6, ph: RL()*6.28, col: V.hex(pickL(['#1c2e26','#26382c','#2e4030','#3a4a32']))}); }
+const reedS = new V.Strokes(reedData.length, {renderOrder: 2}); W.add(reedS.mesh);
+
+/* ---------- 农田：西侧麦田（风中起伏的麦秆笔触）+ 东侧犁过的田垄 ---------- */
+const WHEAT = V.world.WHEAT = { x0: -76, x1: -24, z0: -24, z1: 44 };
+{
+  const g = new THREE.PlaneGeometry(WHEAT.x1-WHEAT.x0, WHEAT.z1-WHEAT.z0).rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color: 0x2c2a1c, fog: true}));
+  m.position.set((WHEAT.x0+WHEAT.x1)/2, 0.04, (WHEAT.z0+WHEAT.z1)/2); W.add(m);
+}
+const wheatData = [];
+const WCOL = ['#c8a040','#d8b450','#b08a30','#e0c060','#a08030','#c09848'].map(h => V.hex(h).map(c => c*0.62));
+const WGRN = ['#5a6a34','#4a5a2c','#6a7a3a'].map(h => V.hex(h).map(c => c*0.7));
+for (let i=0;i<11000;i++){
+  const x = WHEAT.x0 + RL()*(WHEAT.x1-WHEAT.x0), z = WHEAT.z0 + RL()*(WHEAT.z1-WHEAT.z0);
+  if (inLake(x, z, 1.05)) continue;
+  wheatData.push({x, z, h: 1.1+RL()*0.9, ph: RL()*6.28, wid: 0.10+RL()*0.06, col: RL()<.85 ? pickL(WCOL) : pickL(WGRN)});
+}
+const wheatS = new V.Strokes(wheatData.length, {renderOrder: 2}); W.add(wheatS.mesh);
+{ // 东侧田垄（静态）
+  const rows = [];
+  for (let r=0;r<26;r++){ const z = -18 + r*2.8;
+    for (let i=0;i<110;i++){ const x = 24 + RL()*92;
+      rows.push([x, 0.2, z + (RL()-0.5)*0.6, 1, 0, (RL()-0.5)*0.08, 1.6+RL()*1.4, 0.5+RL()*0.25, pickL(r%3===0 ? ['#3a4a2a','#46562e','#2e3c24'] : ['#4a3a28','#5a4630','#3c3020','#52422c'])]); } }
+  const fS = new V.Strokes(rows.length, {renderOrder: 2});
+  rows.forEach((p, i) => fS.set(i, ...p.slice(0, 8), V.hex(p[8]).map(c => c*0.8), 0.95)); fS.commit(); W.add(fS.mesh);
+}
+function updateLakeAndFields(t){
+  ripData.forEach((d, i) => {
+    const sh = 0.55 + 0.45*Math.sin(t*1.7 + d.ph);
+    ripS.set(i, d.x + 0.6*Math.sin(t*0.4 + d.ph), 0.12, d.z, 1, 0, 0.08*Math.sin(d.ph), d.len, d.wid, d.col, 0.55 + 0.4*sh);
+  });
+  ripS.commit();
+  // 倒影：把天上的星/月/漩涡沿水面镜像，按当前相机位置求视线与水面的交点
+  const cam = V.camera.position;
+  V.world.features.forEach((f, fi) => {
+    const Cm = new THREE.Vector3(f.C.x, -f.C.y, f.C.z);
+    const k = cam.y / (cam.y - Cm.y);
+    const R = cam.clone().lerp(Cm, k);
+    const away = new THREE.Vector3(R.x - cam.x, 0, R.z - cam.z).normalize();
+    const bright = f.k === 'swirl' ? 0.55 : 1;
+    for (let j=0;j<REFL_N;j++){
+      const id = fi*REFL_N + j, [a, b, c] = reflJit[id];
+      const along = (a - 0.35)*f.rW*0.45*(f.k==='swirl' ? 1.6 : 1), side = (b - 0.5)*f.rW*0.12;
+      const x = R.x + away.x*along - away.z*side + 0.4*Math.sin(t*2.1 + c*9), z = R.z + away.z*along + away.x*side;
+      if (cam.y > 40 || !inLake(x, z, 0.98)){ reflS.hide(id); continue; }
+      const col = f.k === 'moon' ? V.hex('#f5c95a') : f.k === 'swirl' ? V.hex(c < .5 ? '#a8c4dc' : '#e6e2b8') : V.hex(c < .5 ? '#f7e27a' : '#fbeeb0');
+      reflS.set(id, x, 0.16, z, -away.z, 0, away.x, 1.6 + c*1.4, 0.32 + a*0.2, col, bright*(0.55 + 0.45*Math.sin(t*3 + c*20)));
+    }
+  });
+  reflS.commit();
+  reedData.forEach((d, i) => { const sw = 0.25*Math.sin(t*1.3 + d.ph);
+    reedS.set(i, d.x + sw*0.5, d.h/2, d.z, sw, 1, 0, d.h, 0.12, d.col, 0.95); });
+  reedS.commit();
+  // 麦浪：沿 x 方向传播的风
+  wheatData.forEach((d, i) => {
+    const gust = Math.sin(d.x*0.12 - t*1.6 + d.z*0.05) + 0.4*Math.sin(d.z*0.3 + t*0.9 + d.ph);
+    const lean = 0.32*gust, br = 0.85 + 0.25*Math.max(0, gust);
+    wheatS.set(i, d.x + lean*d.h*0.45, d.h*0.5, d.z, lean, 1, 0.12*Math.sin(d.ph), d.h, d.wid, d.col.map(c => Math.min(1, c*br)), 0.95);
+  });
+  wheatS.commit();
+}
+
+/* ---------- 主角：梵高（笔触人像），站在病房窗前，左手托调色板，右手执笔 ---------- */
+const VG = V.world.vangogh = new THREE.Group();
+VG.position.set(4.2, 5.05, 80.6); VG.rotation.y = 0.35; VG.scale.setScalar(1.12);            // 面朝窗户（-z），略转向窗心
+room.add(VG);
+{
+  const RV = V.rng(1853), pk = a => a[Math.floor(RV()*a.length)];
+  const PAL_VG = {
+    trousers: ['#2b3550','#333d5c','#252d45','#3a4566'],
+    smock: ['#3f5fa0','#4b6db0','#36528c','#5a7cc0','#2f4a80'],
+    skin: ['#d9a878','#c98f62','#e0b48a','#b97a52'],
+    hair: ['#c0592a','#d46a2e','#a8481e','#e07a3a'],
+    shoe: ['#2a1c14','#3a2618'],
+    palette: ['#8a6a40','#9a7848','#7a5a34'],
+  };
+  const parts = [];        // 每个部件：采样函数 + 调色板 + 数量 + 笔触尺寸
+  const ell = (c, r, pal, n, len, wid, filter) => parts.push({n, pal, len, wid, sample(){
+    for (;;){ const u = RV()*Math.PI*2, v = Math.asin(RV()*2-1);
+      const nn = [Math.cos(v)*Math.cos(u), Math.sin(v), Math.cos(v)*Math.sin(u)];
+      const p = [c[0]+r[0]*nn[0], c[1]+r[1]*nn[1], c[2]+r[2]*nn[2]];
+      if (filter && !filter(p, nn)) continue;
+      return {p, n: [nn[0]/r[0], nn[1]/r[1], nn[2]/r[2]], d: [-Math.sin(u), 0.25*(RV()-0.5), Math.cos(u)]}; } }});
+  const cyl = (A, B, rA, rB, pal, n, len, wid, sz=1) => parts.push({n, pal, len, wid, sample(){
+    const s = RV(), a = RV()*Math.PI*2, ax = [B[0]-A[0], B[1]-A[1], B[2]-A[2]];
+    const L = Math.hypot(...ax), u = ax.map(x => x/L);
+    const t1 = Math.abs(u[1]) < 0.9 ? [0,1,0] : [1,0,0];
+    let e1 = [u[1]*t1[2]-u[2]*t1[1], u[2]*t1[0]-u[0]*t1[2], u[0]*t1[1]-u[1]*t1[0]]; const l1 = Math.hypot(...e1); e1 = e1.map(x => x/l1);
+    const e2 = [u[1]*e1[2]-u[2]*e1[1], u[2]*e1[0]-u[0]*e1[2], u[0]*e1[1]-u[1]*e1[0]];
+    const r = rA + (rB - rA)*s, nn = [0,1,2].map(k => Math.cos(a)*e1[k] + Math.sin(a)*e2[k]*sz);
+    return {p: [0,1,2].map(k => A[k] + ax[k]*s + nn[k]*r), n: nn, d: u.map((x, k) => x + 0.25*(RV()-0.5))}; }});
+  // 腿、鞋
+  for (const sx of [-0.32, 0.32]){
+    cyl([sx, 0.15, 0], [sx*0.9, 2.45, 0], 0.27, 0.32, PAL_VG.trousers, 170, 0.32, 0.11);
+    ell([sx, 0.12, -0.12], [0.2, 0.12, 0.34], PAL_VG.shoe, 30, 0.2, 0.08);
+  }
+  // 罩衫：上窄下宽，前后略扁
+  cyl([0, 2.15, 0], [0, 4.0, 0], 0.98, 0.8, PAL_VG.smock, 900, 0.36, 0.12, 0.7);
+  ell([0, 3.95, 0], [0.92, 0.28, 0.56], PAL_VG.smock, 160, 0.3, 0.11);
+  // 左臂（托调色板）、右臂（执笔）
+  cyl([-0.88, 3.9, 0], [-1.02, 3.05, -0.28], 0.21, 0.19, PAL_VG.smock, 120, 0.28, 0.1);
+  cyl([-1.02, 3.05, -0.28], [-0.78, 2.92, -0.95], 0.18, 0.15, PAL_VG.smock, 90, 0.26, 0.09);
+  ell([-0.74, 2.92, -1.0], [0.12, 0.1, 0.13], PAL_VG.skin, 20, 0.12, 0.06);
+  ell([-0.82, 2.86, -1.15], [0.55, 0.04, 0.38], PAL_VG.palette, 90, 0.2, 0.08);
+  cyl([0.88, 3.9, 0], [1.04, 3.1, -0.22], 0.21, 0.19, PAL_VG.smock, 120, 0.28, 0.1);
+  cyl([1.04, 3.1, -0.22], [0.72, 3.55, -0.85], 0.18, 0.15, PAL_VG.smock, 90, 0.26, 0.09);
+  ell([0.68, 3.6, -0.9], [0.12, 0.11, 0.12], PAL_VG.skin, 20, 0.12, 0.06);
+  // 脖子、头、头发、胡子（橙红色是梵高自画像里的标志）
+  cyl([0, 4.08, 0], [0, 4.42, -0.04], 0.17, 0.16, PAL_VG.skin, 40, 0.14, 0.06);
+  ell([0, 4.78, -0.06], [0.34, 0.43, 0.38], PAL_VG.skin, 260, 0.14, 0.06);
+  ell([0, 4.76, -0.46], [0.05, 0.1, 0.05], PAL_VG.skin, 30, 0.08, 0.04);                                                               // 鼻子
+  ell([0, 4.86, 0.02], [0.37, 0.41, 0.39], PAL_VG.hair, 190, 0.18, 0.07, (p, n) => n[1] > 0.45 || (n[2] > 0.2 && n[1] > -0.35));   // 头顶与后脑
+  ell([0, 4.6, -0.08], [0.35, 0.33, 0.37], PAL_VG.hair, 170, 0.15, 0.065, (p, n) => n[1] < -0.2 && n[2] < 0.25);                     // 下颌的短胡子
+  ell([0, 4.66, -0.43], [0.14, 0.035, 0.03], PAL_VG.hair, 24, 0.1, 0.045);                                                           // 唇上的髭
+  // 深色衬底（避免笔触间漏光）
+  const core = new THREE.MeshBasicMaterial({color: 0x1a2236});
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.95, 1.85, 12), core); body.position.y = 3.07; body.scale.z = 0.68; VG.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), new THREE.MeshBasicMaterial({color: 0x5a3a28})); head.scale.set(0.32, 0.41, 0.36); head.position.set(0, 4.78, -0.06); VG.add(head);
+  for (const sx of [-0.32, 0.32]){ const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.25, 2.3, 8), new THREE.MeshBasicMaterial({color: 0x161c2c})); leg.position.set(sx, 1.3, 0); VG.add(leg); }
+  // 画笔
+  const brush = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.02, 0.9, 6), new THREE.MeshBasicMaterial({color: 0x6a4a2a}));
+  brush.position.set(0.66, 3.85, -1.05); brush.rotation.x = -0.9; VG.add(brush);
+  // 生成笔触并按光照着色：右侧烛光偏暖，正面窗光偏冷
+  W.updateMatrixWorld(true);
+  const toW = new THREE.Vector3(), candleW = new THREE.Vector3(8.5, 10.2, 81), winDir = new THREE.Vector3(0, 0.25, -1).normalize();
+  const nW = new THREE.Vector3(), q = new THREE.Quaternion(); VG.getWorldQuaternion(q);
+  const items = [];
+  for (const part of parts){
+    for (let i=0;i<part.n;i++){
+      const sm = part.sample();
+      toW.set(...sm.p); VG.localToWorld(toW);
+      nW.set(...sm.n).normalize().applyQuaternion(q);
+      const warm = Math.max(0, nW.dot(candleW.clone().sub(toW).normalize()));
+      const cool = Math.max(0, nW.dot(winDir));
+      let col = V.hex(pk(part.pal)).map(c => c*0.55);
+      col = col.map((c, k) => c + [1.0, 0.62, 0.28][k]*0.55*warm**1.5 + [0.45, 0.58, 0.95][k]*0.28*cool);
+      items.push([sm.p, sm.d, part.len*(0.8+RV()*0.5), part.wid*(0.85+RV()*0.3), col.map(c => Math.min(1, c))]);
+    }
+  }
+  const vgS = new V.Strokes(items.length, {renderOrder: 4});
+  items.forEach((it, i) => vgS.set(i, ...it[0], ...it[1], it[2], it[3], it[4], 1));
+  vgS.commit(); VG.add(vgS.mesh);
+  // 五官：眼睛（蓝绿）、眉毛（橙红）
+  const face = new V.Strokes(8, {shape: 'dot', renderOrder: 6});
+  [-0.13, 0.13].forEach((x, i) => {
+    face.set(i*4, x, 4.87, -0.405, 1, 0, 0, 0.1, 0.075, V.hex('#20302c'), 1);
+    face.set(i*4+1, x, 4.87, -0.415, 1, 0, 0, 0.055, 0.05, V.hex('#3f6f68'), 1);
+    face.set(i*4+2, x + 0.015, 4.885, -0.42, 1, 0, 0, 0.02, 0.02, V.hex('#e8f0e0'), 0.9);
+    face.set(i*4+3, x, 4.98, -0.39, 1, x > 0 ? -0.25 : 0.25, 0, 0.16, 0.045, V.hex('#b8541f'), 1);
+  });
+  face.commit(); VG.add(face.mesh);
+  // 调色板上的颜料点
+  const dots = new V.Strokes(7, {shape: 'dot', renderOrder: 5});
+  ['#f4d34a','#2c5ea3','#fbeeb0','#e8b830','#7ea6d4','#c0392b','#3e4f2e'].forEach((h, i) => { const a = 0.4 + i*0.5;
+    dots.set(i, -0.82 + Math.cos(a)*0.32, 2.92, -1.15 + Math.sin(a)*0.22, 1, 0, 0, 0.13, 0.13, V.hex(h), 1); });
+  dots.commit(); VG.add(dots.mesh);
+}
+
 /* ---------- 每帧更新 ---------- */
 const worldParams = { phase: null, reveal: 1, opacity: 1 };
 V.world.set = o => Object.assign(worldParams, o);
@@ -318,6 +501,8 @@ V.hooks.post.push((t, act) => {
   moonCard.mesh.visible = k > 0.01; moonCard.mesh.material.opacity = k*worldParams.opacity;
   winList.forEach(w => w.m.material.color.setRGB(0.95, V.lerp(0.62,0.80, 0.5+0.5*Math.sin(t*2+w.ph)), 0.3));
   updateCypress(t);
+  updateLakeAndFields(t);
+  V.world.vangogh.scale.y = 1.12*(1 + 0.006*Math.sin(t*1.6));           // 呼吸
   const cf = 0.85 + 0.15*Math.sin(t*9.3)*Math.sin(t*5.1);
   V.world.candle.set(0, 8.5, 10.2, WIN.z+5, 1,0,0, 6*cf, 6*cf, [1.0,0.7,0.3], 0.55);
   V.world.candle.set(1, 8.5, 10.0, WIN.z+5, 1,0,0, 0.5, 1.0, [1.0,0.95,0.7], 1);

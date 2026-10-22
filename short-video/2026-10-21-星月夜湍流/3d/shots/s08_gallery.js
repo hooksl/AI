@@ -169,8 +169,8 @@ V.shot({ id: 's08', start: 71, end: 83, origin: [24000, 0, 0],
        所以把 HTML 注释置空，在覆盖层里按原样式（27px 灰字、y≈776）自己画，并在 74.3–75.3 交叉淡换 ===== */
     V.setSection(71, undefined, '');
     {
-      const NOTE_A = 'J. Math. Imaging Vis. 2008（arXiv 2006）· 论文首页示意';
-      const NOTE_B = '左：躁动期画作　右：《叼烟斗、缠绷带的自画像》1889 年 1 月 · 示意';
+      const NOTE_A = 'J. Math. Imaging Vis. 2008（arXiv 2006）';
+      const NOTE_B = '左：躁动期画作　右：《叼烟斗、缠绷带的自画像》1889 年 1 月';
       const note = (c, str, k) => {
         if (k <= 0.002) return;
         c.save(); c.globalAlpha = k; c.font = `400 27px ${SANS}`; c.textAlign = 'center'; c.textBaseline = 'middle';

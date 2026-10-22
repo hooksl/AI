@@ -440,7 +440,7 @@ V.shot({ id: 's10', start: 91, end: 114, origin: [32000, 0, 0],
       s.paint.grp.scale.setScalar(S);
       s.paint.update(t, lerp(0.15, 0.85, smooth(P(t, 107.5, 113.5))));
       // 「油彩 · 示意」小标签：挂在镜头前方 10 个单位处（画面右下、字幕区上方），随镜头轻微漂移
-      const kp = E(t, 108.4, 109.2);
+      const kp = 0;                                    // 按用户要求去掉「示意」标签
       s.labPaint.opacity = kp;
       const cam = V.camera, fw = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion), rt = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
       cam.getWorldDirection(fw);

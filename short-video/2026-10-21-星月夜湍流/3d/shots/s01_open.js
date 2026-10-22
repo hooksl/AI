@@ -1,24 +1,26 @@
-/* s01 · 0–20s 开场：笔触在空中长出《星月夜》→ 画变成可以飞进去的世界 → 穿过柏树旁、掠过村庄、冲进大漩涡 → 漩涡隧道里落标题 */
+/* s01 · 0–20s 开场：贴着湖面掠过 → 穿过麦田 → 越过村庄屋顶 → 冲进大漩涡 → 漩涡隧道里落标题 */
 (function(){
 const { keys, E, P, lerp, easeOut, vis } = V;
 
-/* 0–15.4：世界内飞行 */
+/* 0–15.4：世界内飞行 —— 贴着湖面掠过（水里倒映着星空）→ 穿过麦田 → 越过村庄屋顶、擦过教堂尖塔 → 拉升冲进大漩涡 */
 V.shot({ id: 's01a', start: 0, end: 15.4, useWorld: true,
   build(ctx){
-    const G = V.world.features[0];                     // 大漩涡
-    const fwd = V.T0.clone().sub(V.P0).normalize();
-    const s = ctx.state;
+    const G = V.world.features[0], s = ctx.state;
     s.G = G;
-    s.path = V.spline([
-      V.P0.clone().addScaledVector(fwd, 3),
-      V.v3(-2.5, 19, 42),
-      V.v3(-5, 31, 2),
-      G.C.clone().addScaledVector(G.n, -120),
-      G.C.clone().addScaledVector(G.n, -45),
-      G.C.clone().addScaledVector(G.n, -22),
-    ]);
-    // 开场 8.6–11.8s 的公式提示（2D 覆盖层）
-    V.overlayHooks.push((c, t) => {
+    const g = k => G.C.clone().addScaledVector(G.n, -k).toArray();
+    s.K = [                                   // [t, [x, y, z]]
+      [0.0,  [-152, 1.3,  60]],
+      [2.4,  [-128, 1.2,  42]],
+      [4.6,  [-92,  1.5,  16]],             // 湖东岸
+      [6.2,  [-66,  1.9,   2]],             // 进入麦田，麦穗从镜头边掠过
+      [8.0,  [-40,  2.4, -14]],
+      [9.6,  [-18,  10,  -36]],             // 拉起，越过第一排屋顶
+      [11.0, [-2,   17,  -56]],             // 教堂尖塔从右侧擦过
+      [12.6, g(70)],
+      [14.0, g(38)],
+      [14.9, g(22)],
+    ];
+    V.overlayHooks.push((c, t) => {          // 8.6–11.8s：一闪而过的公式
       const k = vis(t, 8.6, 11.8, 0.6, 0.8); if (k <= 0) return;
       c.save(); c.globalAlpha = k*0.6; c.fillStyle = '#060a1c'; V.roundRect(c, 1290, 178, 380, 124, 14); c.fill(); c.restore();
       V.txt(c, 'E(k) ∝ k', 1322, 250, `italic 64px ${V.FONT.MATH}`, '#FFF6D8', 'left', k);
@@ -27,23 +29,20 @@ V.shot({ id: 's01a', start: 0, end: 15.4, useWorld: true,
   },
   update(t, lt, ctx){
     const s = ctx.state, G = s.G;
-    V.world.set({ reveal: lerp(0.06, 1, easeOut(P(t, 0, 5.2))) });
-    let pos, tgt, fov = 50;
-    if (t < 3.2){
-      pos = V.P0.clone().addScaledVector(V.T0.clone().sub(V.P0).normalize(), 3*E(t, 0, 3.2));
-      tgt = V.T0.clone();
-    } else {
-      const u = E(t, 3.2, 14.9);
-      pos = s.path(u);
-      tgt = V.T0.clone().lerp(G.C, E(t, 4.5, 11.5));
-      if (t > 14.9){                                      // 冲进漩涡中心
-        const k = V.easeIn(P(t, 14.9, 15.4));
-        pos = G.C.clone().addScaledVector(G.n, lerp(-22, 8, k));
-        tgt = G.C.clone().addScaledVector(G.n, 40);
-      }
-      fov = lerp(50, 64, E(t, 12.5, 15.3));
+    V.world.set({ reveal: lerp(0.08, 1, easeOut(P(t, 0, 6.0))) });
+    let pos = V.v3(...V.keysSmooth(Math.min(t, 14.9), s.K)), tgt, fov = 52;
+    // 前进方向（速度方向），视线略抬高，让天空与水中倒影同在画面里
+    const ahead = V.v3(...V.keysSmooth(Math.min(t + 0.35, 14.9), s.K)).sub(V.v3(...V.keysSmooth(Math.max(0, Math.min(t, 14.9) - 0.35), s.K))).normalize();
+    const fwdT = pos.clone().addScaledVector(ahead, 80).add(V.v3(0, V.lerp(16, 30, E(t, 6, 10)), -30));
+    tgt = fwdT.lerp(G.C, E(t, 9.8, 13.2));
+    if (t > 14.9){                                       // 冲进漩涡中心
+      const k = V.easeIn(P(t, 14.9, 15.4));
+      pos = G.C.clone().addScaledVector(G.n, lerp(-22, 8, k));
+      tgt = G.C.clone().addScaledVector(G.n, 40);
     }
-    V.setCam(pos, tgt, fov, 0.05*Math.sin(t*0.45) * E(t, 3.2, 6));
+    fov = lerp(lerp(56, 50, E(t, 8, 11)), 64, E(t, 12.5, 15.3));
+    const roll = 0.07*Math.sin(t*0.7)*(1 - E(t, 8, 10)) + 0.04*Math.sin(t*0.45)*E(t, 8, 12);
+    V.setCam(pos, tgt, fov, roll);
   },
 });
 

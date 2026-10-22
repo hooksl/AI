@@ -42,19 +42,19 @@ V.SUBTITLES = [
 V.TITLE_CARD = [15, 20, '《星月夜的湍流》', '梵高画下的，是物理学最难的问题之一', "The Turbulence in Van Gogh's Sky"];
 /* 章节：[起秒, 顶部标签, 画面注释] —— 各镜头可在 build 里通过 V.setSection 覆盖自己时间段内的注释 */
 V.SECTIONS = [
-  [0,   '', '画面为代码生成的 3D 示意'],
+  [0,   '', ''],
   [15,  '', ''],
-  [20,  '1889 · 圣雷米 · 圣保罗精神病院', '卧室窗户朝东 · 示意'],
+  [20,  '1889 · 圣雷米 · 圣保罗精神病院', ''],
   [27,  '1889 · 6 月', '原作藏于纽约现代艺术博物馆 · 73.7 × 92.1 cm'],
-  [30.5,'1889 · 6 月', '画中漩涡 · 示意'],
+  [30.5,'1889 · 6 月', ''],
   [34,  '1922 · 英国', 'L. F. 理查森《用数值方法预报天气》· 原诗直译'],
   [46,  '湍流 · 能量级联', '能量逐层传递，最后变成热'],
-  [54,  '1941 · 莫斯科', '尺度每小一级，能量按固定比例减少 · 示意'],
+  [54,  '1941 · 莫斯科', '尺度每小一级，能量按固定比例减少'],
   [62,  '柯尔莫哥洛夫 −5/3 律', '横轴：漩涡尺度（越往右越小）　纵轴：能量（对数）'],
-  [71,  '2006 · 阿拉贡等人', '左：躁动期画作　右：《叼烟斗、缠绷带的自画像》1889 年 1 月 · 示意'],
-  [83,  '2024 · 厦门大学', 'Physics of Fluids 36(9), 2024 · 论文首页示意'],
-  [87,  '2024 · 厦门大学', '把亮度当作被流动携带的标量 · 示意'],
-  [91,  '−5/3 · 出现', '只在漩涡的尺度范围内成立 · 示意'],
+  [71,  '2006 · 阿拉贡等人', '左：躁动期画作　右：《叼烟斗、缠绷带的自画像》1889 年 1 月'],
+  [83,  '2024 · 厦门大学', 'Physics of Fluids 36(9), 2024'],
+  [87,  '2024 · 厦门大学', '把亮度当作被流动携带的标量'],
+  [91,  '−5/3 · 出现', '只在漩涡的尺度范围内成立'],
   [100, '反直觉', '比最小漩涡更小的尺度'],
   [107, '反直觉', '巴切勒尺度 · 研究者推测'],
   [114, '千禧年大奖难题', '克雷数学研究所，2000 年'],
@@ -99,8 +99,82 @@ function brushStroke(x, y, ang, len, wid, col, a, seed){
   }
   oc.restore();
 }
+/* 每个切点一种转场（不重复）：在切换时刻（p=0.5）都恰好盖满画面，遮住硬切 */
+V.TRANSITIONS = { 20:'dip', 34:'flash', 46:'zoom', 54:'whip', 62:'iris', 71:'starburst', 83:'brush', 91:'curtain', 114:'ink', 121:'blinds' };
+const TR_HALF = { dip: 0.45, flash: 0.35, zoom: 0.32, whip: 0.26, iris: 0.5, starburst: 0.4, brush: WIPE_HALF, curtain: 0.42, ink: 0.45, blinds: 0.4 };
+const TRR = V.rng(4242);
+const ZOOM = Array.from({length: 420}, () => ({a: TRR()*Math.PI*2, r0: 40 + TRR()*900, len: 120 + TRR()*400, w: 2 + TRR()*7, c: TRR()}));
+const WHIP = Array.from({length: 240}, () => ({y: TRR()*1080, x: TRR()*1920, len: 300 + TRR()*900, w: 3 + TRR()*14, c: TRR()}));
+const INK = Array.from({length: 9}, () => ({x: 200 + TRR()*1520, y: 120 + TRR()*840, s: 0.6 + TRR()*0.7, ph: TRR()*6.28}));
+const palC = c => c < .55 ? V.PAL.deep[Math.floor(c*9)%5] : c < .8 ? V.PAL.mid[Math.floor(c*7)%3] : c < .93 ? V.PAL.pale[Math.floor(c*11)%3] : V.PAL.yel[Math.floor(c*13)%3];
+function drawTransition(t){
+  let cut = null, type = null;
+  for (const c of V.CUTS){ const ty = V.TRANSITIONS[c]; if (Math.abs(t - c) < TR_HALF[ty]){ cut = c; type = ty; } }
+  if (cut === null) return;
+  if (type === 'brush') return drawWipe(t);
+  const H = TR_HALF[type], p = (t - cut + H)/(2*H);
+  const cover = p < 0.5 ? V.smooth(p/0.5) : 1 - V.smooth((p-0.5)/0.5);
+  oc.save();
+  if (type === 'dip'){                                    // 沉入黑暗
+    oc.fillStyle = `rgba(3,4,10,${cover})`; oc.fillRect(0,0,1920,1080);
+  } else if (type === 'flash'){                           // 暖白闪光
+    const g = oc.createRadialGradient(960,540,0,960,540,1300);
+    g.addColorStop(0, `rgba(255,248,225,${cover})`); g.addColorStop(1, `rgba(255,226,160,${cover*cover})`);
+    oc.fillStyle = g; oc.fillRect(0,0,1920,1080);
+  } else if (type === 'zoom'){                            // 径向冲刺线
+    oc.fillStyle = `rgba(8,14,38,${V.clamp(cover*1.4-0.4,0,1)})`; oc.fillRect(0,0,1920,1080);
+    oc.lineCap = 'round';
+    for (const z of ZOOM){
+      const r = z.r0*(1 + (p-0.5)*1.6), L = z.len*cover*1.6;
+      oc.strokeStyle = palC(z.c); oc.lineWidth = z.w*(0.5+cover); oc.globalAlpha = cover;
+      oc.beginPath(); oc.moveTo(960 + Math.cos(z.a)*r, 540 + Math.sin(z.a)*r); oc.lineTo(960 + Math.cos(z.a)*(r+L), 540 + Math.sin(z.a)*(r+L)); oc.stroke();
+    }
+  } else if (type === 'whip'){                            // 横向甩镜
+    oc.fillStyle = `rgba(20,40,90,${V.clamp(cover*1.5-0.5,0,1)})`; oc.fillRect(0,0,1920,1080);
+    for (const w of WHIP){
+      const x = ((w.x + (p-0.5)*5200) % 2600 + 2600) % 2600 - 340;
+      const g = oc.createLinearGradient(x, 0, x + w.len, 0);
+      const col = palC(w.c); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.5, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+      oc.globalAlpha = cover; oc.fillStyle = g; oc.fillRect(x, w.y, w.len*(0.4+cover), w.w);
+    }
+  } else if (type === 'iris'){                            // 圆形光圈收拢再张开（金边）
+    const r = Math.max(0, (1 - cover)*1150);
+    oc.fillStyle = '#04050c'; oc.beginPath(); oc.rect(0,0,1920,1080); oc.arc(960, 470, r, 0, Math.PI*2, true); oc.fill();
+    if (r > 2){ oc.strokeStyle = 'rgba(232,197,71,.8)'; oc.lineWidth = 4; oc.beginPath(); oc.arc(960, 470, r, 0, Math.PI*2); oc.stroke(); }
+  } else if (type === 'starburst'){                       // 一颗星炸亮铺满画面
+    const r = 40 + cover*2200, g = oc.createRadialGradient(1380, 300, 0, 1380, 300, r);
+    g.addColorStop(0, 'rgba(255,255,240,1)'); g.addColorStop(0.25, `rgba(252,226,130,${cover})`); g.addColorStop(1, `rgba(250,210,100,${cover*0.9})`);
+    oc.fillStyle = g; oc.fillRect(0,0,1920,1080);
+    oc.translate(1380, 300); oc.strokeStyle = `rgba(255,250,220,${cover})`; oc.lineWidth = 6;
+    for (let k=0;k<8;k++){ oc.rotate(Math.PI/4); oc.beginPath(); oc.moveTo(0,0); oc.lineTo(cover*1600, 0); oc.stroke(); }
+  } else if (type === 'curtain'){                         // 斜切幕布，金色边缘
+    const slant = 420, e = p < 0.5 ? V.lerp(-slant, 1920 + slant, V.smooth(p/0.5)) : V.lerp(-slant, 1920 + slant, V.smooth((p-0.5)/0.5));
+    oc.fillStyle = '#070b1e'; oc.beginPath();
+    if (p < 0.5){ oc.moveTo(0,0); oc.lineTo(e + slant/2, 0); oc.lineTo(e - slant/2, 1080); oc.lineTo(0,1080); }
+    else { oc.moveTo(e + slant/2, 0); oc.lineTo(1920,0); oc.lineTo(1920,1080); oc.lineTo(e - slant/2, 1080); }
+    oc.fill();
+    oc.strokeStyle = 'rgba(232,197,71,.9)'; oc.lineWidth = 6; oc.shadowColor = '#E8C547'; oc.shadowBlur = 24;
+    oc.beginPath(); oc.moveTo(e + slant/2, 0); oc.lineTo(e - slant/2, 1080); oc.stroke();
+  } else if (type === 'ink'){                             // 墨蓝色颜料滴落晕开
+    oc.fillStyle = '#0b1a44';
+    for (const d of INK){
+      const R = cover*1100*d.s; if (R < 1) continue;
+      oc.beginPath();
+      for (let k=0;k<=48;k++){ const a = k/48*Math.PI*2, rr = R*(1 + 0.12*Math.sin(a*5 + d.ph) + 0.06*Math.sin(a*11 + d.ph*2));
+        k ? oc.lineTo(d.x + Math.cos(a)*rr, d.y + Math.sin(a)*rr) : oc.moveTo(d.x + Math.cos(a)*rr, d.y + Math.sin(a)*rr); }
+      oc.fill();
+    }
+    if (cover > 0.9){ oc.fillRect(0,0,1920,1080); }
+  } else if (type === 'blinds'){                          // 竖条百叶合拢
+    const n = 12, wS = 1920/n;
+    for (let k=0;k<n;k++){ const w = wS*Math.min(1, cover*1.08);
+      oc.fillStyle = k%2 ? '#0e1d4a' : '#14275e'; oc.fillRect(k*wS + (wS - w)/2, 0, w, 1080);
+      oc.fillStyle = 'rgba(232,197,71,.55)'; if (w < wS - 2) { oc.fillRect(k*wS + (wS - w)/2 - 1, 0, 2, 1080); oc.fillRect(k*wS + (wS + w)/2 - 1, 0, 2, 1080); } }
+  }
+  oc.restore();
+}
 function drawWipe(t){
-  let best = null; for (const c of V.CUTS) if (Math.abs(t - c) < WIPE_HALF) best = c;
+  let best = null; for (const c of V.CUTS) if (Math.abs(t - c) < WIPE_HALF && V.TRANSITIONS[c] === 'brush') best = c;
   if (best === null) return;
   const p = (t - best + WIPE_HALF)/(2*WIPE_HALF);         // 0→1，0.5 为切换时刻
   const cover = p < 0.5 ? V.smooth(p/0.5) : 1 - V.smooth((p-0.5)/0.5);
@@ -157,7 +231,7 @@ V.overlay = function(t, act){
   drawVignette();
   for (const h of (V.overlayHooks || [])) h(oc, t, act);     // 镜头可注册自己的 2D 覆盖绘制
   drawEndCards(t);
-  drawWipe(t);
+  drawTransition(t);
   const inTitle = t >= V.TITLE_CARD[0] && t < V.TITLE_CARD[1];
   const sub = V.SUBTITLES.find(([a,b]) => t >= a && t < b);
   const el = $('subtitle'), elEn = $('subtitle-en');
