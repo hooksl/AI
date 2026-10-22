@@ -20,12 +20,6 @@ V.shot({ id: 's01a', start: 0, end: 15.4, useWorld: true,
       [14.0, g(38)],
       [14.9, g(22)],
     ];
-    V.overlayHooks.push((c, t) => {          // 8.6–11.8s：一闪而过的公式
-      const k = vis(t, 8.6, 11.8, 0.6, 0.8); if (k <= 0) return;
-      c.save(); c.globalAlpha = k*0.6; c.fillStyle = '#060a1c'; V.roundRect(c, 1290, 178, 380, 124, 14); c.fill(); c.restore();
-      V.txt(c, 'E(k) ∝ k', 1322, 250, `italic 64px ${V.FONT.MATH}`, '#FFF6D8', 'left', k);
-      V.txt(c, '−5/3', 1542, 222, `italic 38px ${V.FONT.MATH}`, '#FFF6D8', 'left', k);
-    });
   },
   update(t, lt, ctx){
     const s = ctx.state, G = s.G;

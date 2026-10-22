@@ -308,11 +308,96 @@ function buildAll(){
 }
 V.activeShot = t => { let a = null; for (const s of V.shots) if (t >= s.start && t < s.end) a = s; return a; };
 
-window.render = function(t){
-  buildAll();
-  const act = V.activeShot(t);
+/* ---------- 镜头间过渡：前后两个镜头各渲染到离屏纹理，再用着色器融合（不是遮挡） ----------
+   V.TRANS = { 切点秒: [类型, 时长] }，切点前后各 半个时长 内同时渲染两个镜头 */
+V.TRANS = { 20:['ripple',1.4], 34:['swirl',1.1], 46:['zoom',0.9], 54:['paintwipe',1.0], 62:['dissolve',1.2],
+            71:['radial',1.1], 83:['leak',1.2], 91:['whip',0.7], 114:['ink',1.3], 121:['defocus',1.4] };
+const TR_TYPES = ['ripple','swirl','zoom','paintwipe','dissolve','radial','leak','whip','ink','defocus'];
+const rtOpts = { depthBuffer: true };
+let rtA = null, rtB = null, trScene = null, trCam = null, trMat = null;
+function initTransition(){
+  const w = Math.round(V.W*V.PR), h = Math.round(V.H*V.PR);
+  rtA = new THREE.WebGLRenderTarget(w, h, rtOpts); rtB = new THREE.WebGLRenderTarget(w, h, rtOpts);
+  rtA.texture.colorSpace = rtB.texture.colorSpace = THREE.SRGBColorSpace;   // 与直接上屏一致的色彩空间
+  trCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  trMat = new THREE.ShaderMaterial({
+    uniforms: { uA:{value:null}, uB:{value:null}, uP:{value:0}, uType:{value:0}, uT:{value:0}, uAspect:{value:V.W/V.H} },
+    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    fragmentShader: `
+      uniform sampler2D uA, uB; uniform float uP, uT, uAspect; uniform int uType; varying vec2 vUv;
+      float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i=0;i<5;i++){ s += a*vn(p); p *= 2.03; a *= 0.5; } return s; }
+      vec2 rot(vec2 v, float a){ float c = cos(a), s = sin(a); return vec2(c*v.x - s*v.y, s*v.x + c*v.y); }
+      vec4 blurA(vec2 uv, vec2 d){ vec4 c = vec4(0); for (int i=-5;i<=5;i++) c += texture2D(uA, uv + d*float(i)/5.0); return c/11.0; }
+      vec4 blurB(vec2 uv, vec2 d){ vec4 c = vec4(0); for (int i=-5;i<=5;i++) c += texture2D(uB, uv + d*float(i)/5.0); return c/11.0; }
+      void main(){
+        vec2 uv = vUv, c = vec2(0.5); float p = uP, bell = sin(3.14159*p);
+        vec2 q = (uv - c)*vec2(uAspect, 1.0); float r = length(q);
+        vec4 A, B; float m;
+        if (uType == 0){            // ripple 水波
+          vec2 off = normalize(q + 1e-5)*sin(r*48.0 - p*22.0)*0.018*bell/vec2(uAspect,1.0);
+          A = texture2D(uA, uv + off); B = texture2D(uB, uv - off); m = smoothstep(0.3, 0.7, p);
+        } else if (uType == 1){     // swirl 漩涡扭转
+          float ang = bell*3.2*pow(max(0.0, 1.0 - r/0.9), 2.0);
+          vec2 qa = rot(q, ang), qb = rot(q, -ang*0.8);
+          A = texture2D(uA, c + qa/vec2(uAspect,1.0)); B = texture2D(uB, c + qb/vec2(uAspect,1.0)); m = smoothstep(0.35, 0.65, p);
+        } else if (uType == 2){     // zoom 推进冲入 + 径向模糊
+          float za = 1.0 + p*1.2, zb = 1.0 + (1.0-p)*0.35;
+          vec2 ua = c + (uv - c)/za, ub = c + (uv - c)/zb; vec2 da = (uv - c)*0.035*bell, db = (uv - c)*0.02*bell;
+          A = blurA(ua, da); B = blurB(ub, db); m = smoothstep(0.4, 0.62, p);
+        } else if (uType == 3){     // paintwipe 颜料刷过（参差边缘 + 金色边光）
+          float n = fbm(vec2(uv.y*14.0, uv.x*1.5) + 3.1)*0.22;
+          float e = p*1.5 - 0.25; float x = uv.x + n - 0.11;
+          m = smoothstep(e + 0.02, e - 0.02, x);
+          A = texture2D(uA, uv); B = texture2D(uB, uv);
+          float edge = exp(-pow((x - e)/0.012, 2.0));
+          gl_FragColor = mix(A, B, m) + vec4(0.95, 0.78, 0.32, 0.0)*edge*0.9; return;
+        } else if (uType == 4){     // dissolve 笔触溶解（沿斜向拉长的笔触噪声）
+          vec2 w = rot(q, 0.6)*vec2(3.5, 26.0);
+          float n = fbm(w + 7.0);
+          m = smoothstep(n - 0.06, n + 0.06, p*1.25 - 0.12);
+          A = texture2D(uA, uv); B = texture2D(uB, uv);
+        } else if (uType == 5){     // radial 从一颗星处圆形展开（参差金边）
+          vec2 o = (uv - vec2(0.72, 0.7))*vec2(uAspect, 1.0); float d = length(o);
+          float n = fbm(vec2(atan(o.y, o.x)*3.0, d*4.0))*0.18;
+          float R = p*1.9; m = smoothstep(R + 0.02, R - 0.02, d + n);
+          A = texture2D(uA, uv); B = texture2D(uB, uv);
+          float edge = exp(-pow((d + n - R)/0.015, 2.0));
+          gl_FragColor = mix(A, B, m) + vec4(1.0, 0.85, 0.45, 0.0)*edge; return;
+        } else if (uType == 6){     // leak 暖色漏光
+          A = texture2D(uA, uv); B = texture2D(uB, uv); m = smoothstep(0.3, 0.7, p);
+          float lx = uv.x - (p*1.6 - 0.3);
+          vec3 leak = vec3(1.0, 0.72, 0.35)*exp(-lx*lx*6.0)*bell*0.85 + vec3(1.0, 0.9, 0.6)*bell*0.18;
+          gl_FragColor = vec4(mix(A.rgb, B.rgb, m) + leak, 1.0); return;
+        } else if (uType == 7){     // whip 横向甩镜
+          float sh = bell*0.09;
+          A = blurA(uv + vec2(p*0.35, 0.0), vec2(sh, 0.0)); B = blurB(uv - vec2((1.0-p)*0.35, 0.0), vec2(sh, 0.0));
+          m = smoothstep(0.42, 0.58, p);
+        } else if (uType == 8){     // ink 墨蓝晕开
+          float n = fbm(q*2.2 + 11.0);
+          m = smoothstep(n - 0.04, n + 0.04, p*1.25 - 0.1);
+          A = texture2D(uA, uv); B = texture2D(uB, uv);
+          float rim = smoothstep(0.12, 0.0, abs(n - (p*1.25 - 0.1)));
+          gl_FragColor = mix(A, B, m)*(1.0 - 0.75*rim) + vec4(0.04, 0.08, 0.2, 0.0)*rim; return;
+        } else {                    // defocus 虚焦叠化
+          float b = bell*0.012;
+          vec4 a1 = blurA(uv, vec2(b, 0.0)), a2 = blurA(uv, vec2(0.0, b*uAspect));
+          vec4 b1 = blurB(uv, vec2(b, 0.0)), b2 = blurB(uv, vec2(0.0, b*uAspect));
+          A = (a1 + a2)*0.5; B = (b1 + b2)*0.5; m = smoothstep(0.2, 0.8, p);
+        }
+        gl_FragColor = mix(A, B, m);
+      }`,
+    depthTest: false, depthWrite: false,
+  });
+  trScene = new THREE.Scene();
+  trScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), trMat));
+}
+const CLEAR_RT = new THREE.Color().setRGB(7/255, 11/255, 30/255, THREE.LinearSRGBColorSpace);   // 离屏纹理不做色彩转换，直接写入 sRGB 数值
+function renderShot(act, t, target){
   V.scene.fog = V.DEFAULT_FOG();
-  V.renderer.setClearColor(0x070b1e, 1);
+  if (target) V.renderer.setClearColor(CLEAR_RT, 1); else V.renderer.setClearColor(0x070b1e, 1);
   for (const h of V.hooks.pre) h(t, act);
   for (const s of V.shots) s.ctx.group.visible = (s === act);
   if (act && !act.broken){
@@ -320,7 +405,29 @@ window.render = function(t){
     catch(e){ console.error('[update ' + act.id + ' @' + t.toFixed(2) + ']', e); }
   }
   for (const h of V.hooks.post) h(t, act);
+  V.renderer.setRenderTarget(target);
   V.renderer.render(V.scene, V.camera);
+}
+V.activeTransition = t => { for (const c in V.TRANS){ const [ty, d] = V.TRANS[c]; if (Math.abs(t - c) < d/2) return { c: +c, ty, d }; } return null; };
+window.render = function(t){
+  buildAll();
+  const tr = V.activeTransition(t);
+  let act;
+  if (!tr){
+    act = V.activeShot(t);
+    renderShot(act, t, null);
+  } else {
+    if (!rtA) initTransition();
+    const a = V.activeShot(tr.c - 1e-3), b = V.activeShot(tr.c);
+    renderShot(a, t, rtA);
+    renderShot(b, t, rtB);
+    const p = V.smooth(V.clamp((t - (tr.c - tr.d/2))/tr.d, 0, 1));
+    trMat.uniforms.uA.value = rtA.texture; trMat.uniforms.uB.value = rtB.texture;
+    trMat.uniforms.uP.value = p; trMat.uniforms.uT.value = t; trMat.uniforms.uType.value = TR_TYPES.indexOf(tr.ty);
+    V.renderer.setRenderTarget(null);
+    V.renderer.render(trScene, trCam);
+    act = t < tr.c ? a : b;
+  }
   V.overlay && V.overlay(t, act);
 };
 window.setup = function(done){

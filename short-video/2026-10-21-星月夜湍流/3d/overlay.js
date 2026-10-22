@@ -204,7 +204,7 @@ function drawVignette(){
 }
 
 function drawEndCards(t){
-  const d = vis(t, 128, 132.2, 0.6, 0.6);
+  const d = 0;                                   // 声明卡已按用户要求去掉
   if (d>0){ oc.save(); oc.globalAlpha = d;
     oc.fillStyle = 'rgba(8,10,24,.80)'; V.roundRect(oc, 360, 230, 1200, 420, 8); oc.fill();
     oc.strokeStyle = 'rgba(232,197,71,.7)'; oc.lineWidth = 1.5; V.roundRect(oc, 360, 230, 1200, 420, 8); oc.stroke();
@@ -213,7 +213,7 @@ function drawEndCards(t){
       .forEach((s,i)=> V.txt(oc, s, 960, 380 + i*62, `500 34px ${F.SANS}`, C.ink));
     V.txt(oc, 'Statistics of brightness, not a claim that the painting is a fluid.', 960, 580, `italic 26px ${F.GARA}`, C.dim);
     oc.restore(); }
-  const r = vis(t, 132, 136.2, 0.6, 0.6);
+  const r = vis(t, 129, 135.2, 0.6, 0.6);
   if (r>0){ oc.save(); oc.globalAlpha = r;
     oc.fillStyle = 'rgba(8,10,24,.80)'; V.roundRect(oc, 260, 230, 1400, 420, 8); oc.fill();
     oc.strokeStyle = 'rgba(232,197,71,.7)'; oc.lineWidth = 1.5; V.roundRect(oc, 260, 230, 1400, 420, 8); oc.stroke();
@@ -231,7 +231,7 @@ V.overlay = function(t, act){
   drawVignette();
   for (const h of (V.overlayHooks || [])) h(oc, t, act);     // 镜头可注册自己的 2D 覆盖绘制
   drawEndCards(t);
-  drawTransition(t);
+  // 转场改由 core.js 的离屏融合完成（V.TRANS），覆盖层不再遮挡画面
   const inTitle = t >= V.TITLE_CARD[0] && t < V.TITLE_CARD[1];
   const sub = V.SUBTITLES.find(([a,b]) => t >= a && t < b);
   const el = $('subtitle'), elEn = $('subtitle-en');

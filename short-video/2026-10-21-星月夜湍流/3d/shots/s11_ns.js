@@ -342,6 +342,7 @@ V.shot({ id: 's11', start: 114, end: 121, origin: [36000, 0, 0],
     s.counter.mesh.scale.setScalar(lerp(0.9, 1, easeOut(P(t, 117.35, 118.2))) * (1 + 0.04*Math.exp(-Math.max(0, t - 119.8)*4)*(t >= 119.8 ? 1 : 0)));
     s.darkCnt.opacity = E(t, 117.0, 117.9);
     s.title.opacity = 1 - E(t, 117.9, 118.8);
+    s.eq1.mesh.visible = s.eq2.mesh.visible = false;      // 按用户要求：不展示方程式，只保留名称与百万美元悬赏
 
     /* ---- 相机（先设好，后面把笔触投影到屏幕上做文字避让） ---- */
     ctx.cam(camPos(t), camTgt(t), herm(CAM, t, 3)[0], 0.03*Math.sin(t*0.45));
@@ -387,6 +388,7 @@ V.shot({ id: 's11', start: 114, end: 121, origin: [36000, 0, 0],
         s.sparkS.set(j, x, y, z, p.vx, p.vy - 1.2*u, p.vz*0.3, p.len*(1 - 0.5*f), p.wid, p.col, Math.sin(Math.PI*Math.min(1, f*1.2 + 0.08))*0.9);
       });
       s.sparkS.commit();
+      s.pen.mesh.visible = s.sparkS.mesh.visible = false;   // 方程不再书写，笔尖与火花一并隐藏
     }
 
     /* ---- 流线笔触 ---- */
