@@ -2,7 +2,7 @@
 # upload_drive.sh — 把成片上传到 Google Drive 的「短视频/<项目名>/」文件夹
 # 依赖环境变量（在云环境设置里配置，不要写进仓库）：
 #   RCLONE_CONFIG_GDRIVE_TYPE=drive
-#   RCLONE_CONFIG_GDRIVE_SCOPE=drive.file
+#   RCLONE_CONFIG_GDRIVE_SCOPE=drive          （用户选择了完全访问；也可用 drive.file）
 #   RCLONE_CONFIG_GDRIVE_TOKEN={"access_token":...,"refresh_token":...}
 # 用法: bash short-video/tools/upload_drive.sh <项目名> <文件>...
 set -euo pipefail
@@ -18,6 +18,7 @@ if ! command -v rclone >/dev/null 2>&1; then
   mkdir -p "$HOME/.local/bin" && cp "$tmp"/rclone-*-linux-amd64/rclone "$HOME/.local/bin/"
   export PATH="$HOME/.local/bin:$PATH"
 fi
+# 只用 copy：绝不用 sync（sync 会删除云盘里多出来的文件）
 for f in "$@"; do
   rclone copy "$f" "gdrive:短视频/$PROJECT/" --progress --stats-one-line
 done
