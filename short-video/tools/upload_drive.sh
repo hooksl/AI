@@ -4,6 +4,7 @@
 #   RCLONE_CONFIG_GDRIVE_TYPE=drive
 #   RCLONE_CONFIG_GDRIVE_SCOPE=drive          （用户选择了完全访问；也可用 drive.file）
 #   RCLONE_CONFIG_GDRIVE_TOKEN={"access_token":...,"refresh_token":...}
+#   RCLONE_CONFIG_GDRIVE_CLIENT_ID / RCLONE_CONFIG_GDRIVE_CLIENT_SECRET   （自建 client_id 时必填：令牌续期要用同一个 client）
 # 用法: bash short-video/tools/upload_drive.sh <项目名> <文件>...
 set -euo pipefail
 [ $# -ge 2 ] || { echo "用法: upload_drive.sh <项目名> <文件>..." >&2; exit 2; }
