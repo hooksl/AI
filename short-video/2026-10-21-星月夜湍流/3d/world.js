@@ -128,23 +128,25 @@ for (const [mesh, ro] of [[sky.mesh, -9], [glow.mesh, -8], [moonCard.mesh, -7]])
 
 /* ---------- 地形：远山 ---------- */
 const ridgeH = x => { const u = 0.5 + Math.atan2(x, 180)/(AZ_SPAN*D2R); const el = elOf(hz(u)); return P0.y + 180*Math.tan(el) - 2; };
-const TX = 900, TZ = 520, NX = 120, NZ = 60;
-const terr = new THREE.PlaneGeometry(TX, TZ, NX, NZ); terr.rotateX(-Math.PI/2); terr.translate(0, 0, -60 - TZ/2);
+const TX = 900, TZ = 540, NX = 120, NZ = 66;
+const terr = new THREE.PlaneGeometry(TX, TZ, NX, NZ); terr.rotateX(-Math.PI/2); terr.translate(0, 0, -40 - TZ/2);
 const tp = terr.attributes.position, tcol = new Float32Array(tp.count*3);
+// 山脚从村后的平地（z≈-58）开始隆起：以前地形在 z=-60 一开始就有十几米高，镜头升高贴近村子时会从下面看到地形的底面（不绘制），像山底透明
 const hAt = (x, z) => {
-  const ridge = ridgeH(x) * Math.exp(-(((z+112)/58)**2));
+  const ridge = ridgeH(x) * Math.exp(-(((z+112)/58)**2)) * V.smooth(V.clamp((-z-58)/34, 0, 1));
   const far = (34 + 14*Math.sin(x*0.011+1) + 8*Math.sin(x*0.027)) * V.smooth(V.clamp((-z-160)/140, 0, 1));
   const roll = 2.2*Math.sin(x*0.05)*Math.sin(z*0.07);
-  return Math.max(0, Math.max(ridge, far) + roll*V.smooth(V.clamp((-z-70)/40,0,1)));
+  const h = Math.max(ridge, far) + roll*V.smooth(V.clamp((-z-70)/40,0,1));
+  return h > 0.05 ? h : -0.2;                                                         // 平地部分沉到地面以下，不和地面打架
 };
 for (let i=0;i<tp.count;i++){
   const x = tp.getX(i), z = tp.getZ(i), h = hAt(x,z); tp.setY(i, h);
-  const k = V.clamp(h/40, 0, 1);
+  const k = V.clamp(h/40, 0, 1);   // h<0 的平地部分被地面挡住
   const c = new THREE.Color().setRGB(V.lerp(0.04,0.09,k), V.lerp(0.06,0.13,k), V.lerp(0.15,0.27,k), THREE.SRGBColorSpace);   // 山要比天空深：受光、调色提亮之后也不会和天空混成一片
   tcol.set([c.r,c.g,c.b], i*3);
 }
 terr.setAttribute('color', new THREE.BufferAttribute(tcol,3)); terr.computeVertexNormals();
-const terrain = new THREE.Mesh(terr, new THREE.MeshBasicMaterial({vertexColors: true, fog: true}));
+const terrain = new THREE.Mesh(terr, new THREE.MeshBasicMaterial({vertexColors: true, fog: true, side: THREE.DoubleSide}));   // 双面：任何角度都不会看穿
 W.add(terrain);
 // 近处地面
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 260).rotateX(-Math.PI/2).translate(0,-0.05,60), new THREE.MeshBasicMaterial({color: 0x0d1736, fog: true}));
@@ -170,7 +172,7 @@ for (let i=0;i<1400;i++){
 fieldS.commit(); W.add(fieldS.mesh);
 
 /* ---------- 村庄与教堂 ---------- */
-const houseMat = [0x2a3b6b, 0x34446e, 0x26355e].map(c => new THREE.MeshBasicMaterial({color: c, fog: true}));
+const houseMat = [0x3e5384, 0x4a5d8e, 0x384c7c].map(c => new THREE.MeshBasicMaterial({color: c, fog: true}));   // 墙面比山浅一档：村子衬在深色的山前面
 const roofMat = [0x18223f, 0x1e2a4d].map(c => new THREE.MeshBasicMaterial({color: c, fog: true}));
 const winMat = new THREE.MeshBasicMaterial({color: 0xf2c94c, fog: false});
 const village = new THREE.Group(); W.add(village);
@@ -208,7 +210,7 @@ village.children.forEach(body => {
   const g = body.geometry && body.geometry.parameters; if (!g || g.width === undefined) return;   // 跳过教堂（Group）
   const win = body.children.find(c => c.geometry && c.geometry.type === 'PlaneGeometry');
   addHouseStrokes(body.position.x, body.position.z, body.rotation.y, g.width, g.height, g.depth,
-    ['#2a3b6b','#34446e','#3c5080','#26355e','#4a5c88','#2f4272'], ['#18223f','#1e2a4d','#243258','#141c36'],
+    ['#4a5f90','#56699a','#62759f','#3c5084','#6e82aa','#4c6294'], ['#18223f','#1e2a4d','#243258','#141c36'],
     win ? [win.position.x, win.position.y, win.geometry.parameters.width, win.geometry.parameters.height] : null);
 });
 { // 教堂
