@@ -309,10 +309,25 @@ function buildAll(){
 V.activeShot = t => { let a = null; for (const s of V.shots) if (t >= s.start && t < s.end) a = s; return a; };
 
 /* ---------- 镜头间过渡：前后两个镜头各渲染到离屏纹理，再用着色器融合（不是遮挡） ----------
-   V.TRANS = { 切点秒: [类型, 时长] }，切点前后各 半个时长 内同时渲染两个镜头 */
-V.TRANS = { 20:['ripple',1.4], 34:['swirl',1.1], 46:['zoom',0.9], 54:['paintwipe',1.0], 62:['dissolve',1.2],
-            71:['radial',1.1], 83:['leak',1.2], 91:['whip',0.7], 114:['ink',1.3], 121:['defocus',1.4] };
-const TR_TYPES = ['ripple','swirl','zoom','paintwipe','dissolve','radial','leak','whip','ink','defocus'];
+   V.TRANS = { 切点秒: [类型, 时长, 中心偏移] }：以 切点+偏移 为中心、前后各半个时长内同时渲染两个镜头。
+   原则：融合贯穿整个时长（不在中间一下子切换）；边缘全部柔化、不加描边；两个镜头在转场里都保持运动（见 coast）。 */
+V.TRANS = {
+  15.4: ['zoomthru', 1.2, -0.3],   // 冲进漩涡 → 漩涡隧道：继续向前冲，径向拖影交接
+  20:   ['glow', 2.0],             // 隧道 → 病房：烛光和窗光先亮起来，房间再慢慢浮现
+  34:   ['flow', 1.8],             // 窗外星空 → 小诗：两个画面顺着一股旋流流过去
+  46:   ['iris', 1.6],             // 冲进大漩涡 → 能量级联：从漩涡中心柔和地晕开
+  54:   ['paintwipe', 1.6],        // 级联 → 柯尔莫哥洛夫：一笔宽刷从左扫到右
+  62:   ['dissolve', 1.6],         // 柱状图 → −5/3 直线：柔焦叠化
+  71:   ['pan', 1.6],              // 频谱 → 2006 论文：镜头横移到下一块画板
+  83:   ['leak', 1.8],             // 自画像 → 2024 论文：一束暖光扫过
+  91:   ['whip', 1.0],             // 量漩涡 → 算频谱：甩镜
+  114:  ['ink', 1.8],              // 颜料混合 → 纳维-斯托克斯：水彩晕染
+  121:  ['defocus', 1.8],          // 百万美元 → 回到星空：跑焦
+};
+const TR_TYPES = ['zoomthru','glow','flow','iris','paintwipe','dissolve','pan','leak','whip','ink','defocus'];
+/* 调色：暗部和中间调提亮、高光基本不动（y = c + a·c·(1−c)²），饱和度 ×1.08；a 按镜头设，越暗的镜头提得越多 */
+V.LIFT = { s01a: 1.0, s01b: 1.2, s03: 1.3, s04: 1.2, s05: 1.8, s06: 1.8, s07: 2.0, s08: 1.4, s09: 1.0, s10: 1.8, s11: 1.6, s12: 1.2 };
+const liftOf = s => (s && V.LIFT[s.id] != null) ? V.LIFT[s.id] : 1.2;
 const rtOpts = { depthBuffer: true, samples: 4 };    // 4× 多重采样，与直接上屏的抗锯齿一致
 let rtA = null, rtB = null, trScene = null, trCam = null, trMat = null;
 function initTransition(){
@@ -321,81 +336,102 @@ function initTransition(){
   rtA.texture.colorSpace = rtB.texture.colorSpace = THREE.SRGBColorSpace;   // 与直接上屏一致的色彩空间
   trCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   trMat = new THREE.ShaderMaterial({
-    uniforms: { uA:{value:null}, uB:{value:null}, uP:{value:0}, uType:{value:0}, uT:{value:0}, uAspect:{value:V.W/V.H} },
+    uniforms: { uA:{value:null}, uB:{value:null}, uP:{value:0}, uType:{value:0}, uT:{value:0}, uAspect:{value:V.W/V.H}, uLA:{value:1}, uLB:{value:1} },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     fragmentShader: `
-      uniform sampler2D uA, uB; uniform float uP, uT, uAspect; uniform int uType; varying vec2 vUv;
+      uniform sampler2D uA, uB; uniform float uP, uT, uAspect, uLA, uLB; uniform int uType; varying vec2 vUv;
       float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
       float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
         return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
       float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i=0;i<5;i++){ s += a*vn(p); p *= 2.03; a *= 0.5; } return s; }
-      vec2 rot(vec2 v, float a){ float c = cos(a), s = sin(a); return vec2(c*v.x - s*v.y, s*v.x + c*v.y); }
-      vec4 blurA(vec2 uv, vec2 d){ vec4 c = vec4(0); for (int i=-5;i<=5;i++) c += texture2D(uA, uv + d*float(i)/5.0); return c/11.0; }
-      vec4 blurB(vec2 uv, vec2 d){ vec4 c = vec4(0); for (int i=-5;i<=5;i++) c += texture2D(uB, uv + d*float(i)/5.0); return c/11.0; }
+      float fbm3(vec2 p){ float a = 0.5, s = 0.0; for (int i=0;i<3;i++){ s += a*vn(p); p *= 2.03; a *= 0.5; } return s/0.875; }
+      vec2 mir(vec2 uv){ return 1.0 - abs(1.0 - mod(uv, 2.0)); }       // 镜像取样：画面平移出界时不会出现拉长的边缘
+      vec4 tx(sampler2D s, vec2 uv){ return texture2D(s, mir(uv)); }
+      vec2 zm(vec2 uv, float z, vec2 c){ return c + (uv - c)/z; }       // z > 1：放大（推近）
+      vec4 radial(sampler2D s, vec2 uv, vec2 c, float k){ vec4 a = vec4(0.0); for (int i=0;i<12;i++) a += tx(s, c + (uv - c)*(1.0 - k*float(i)/11.0)); return a/12.0; }
+      vec4 dirb(sampler2D s, vec2 uv, vec2 d){ vec4 a = vec4(0.0); for (int i=-6;i<=6;i++) a += tx(s, uv + d*float(i)/6.0); return a/13.0; }
+      vec4 disc(sampler2D s, vec2 uv, float r){ vec4 a = tx(s, uv);
+        for (int i=1;i<24;i++){ float f = float(i), rr = sqrt(f/23.0)*r, an = f*2.39996; a += tx(s, uv + vec2(cos(an)/uAspect, sin(an))*rr); } return a/24.0; }
+      vec3 grade(vec3 c, float a){ vec3 y = c + a*c*(1.0 - c)*(1.0 - c); float L = dot(y, vec3(0.2126, 0.7152, 0.0722));
+        return clamp(vec3(L) + (y - L)*1.08, 0.0, 1.0); }
       void main(){
-        vec2 uv = vUv, c = vec2(0.5); float p = uP, bell = sin(3.14159*p);
-        vec2 q = (uv - c)*vec2(uAspect, 1.0); float r = length(q);
+        vec2 uv = vUv, c = vec2(0.5); float p = uP, bell = sin(3.14159*p), lift = mix(uLA, uLB, p);
+        vec2 q = (uv - c)*vec2(uAspect, 1.0);
         vec4 A, B; float m;
-        if (uType == 0){            // ripple 水波
-          vec2 off = normalize(q + 1e-5)*sin(r*48.0 - p*22.0)*0.018*bell/vec2(uAspect,1.0);
-          A = texture2D(uA, uv + off); B = texture2D(uB, uv - off); m = smoothstep(0.3, 0.7, p);
-        } else if (uType == 1){     // swirl 漩涡扭转
-          float ang = bell*3.2*pow(max(0.0, 1.0 - r/0.9), 2.0);
-          vec2 qa = rot(q, ang), qb = rot(q, -ang*0.8);
-          A = texture2D(uA, c + qa/vec2(uAspect,1.0)); B = texture2D(uB, c + qb/vec2(uAspect,1.0)); m = smoothstep(0.35, 0.65, p);
-        } else if (uType == 2){     // zoom 推进冲入 + 径向模糊
-          float za = 1.0 + p*1.2, zb = 1.0 + (1.0-p)*0.35;
-          vec2 ua = c + (uv - c)/za, ub = c + (uv - c)/zb; vec2 da = (uv - c)*0.035*bell, db = (uv - c)*0.02*bell;
-          A = blurA(ua, da); B = blurB(ub, db); m = smoothstep(0.4, 0.62, p);
-        } else if (uType == 3){     // paintwipe 颜料刷过（参差边缘 + 金色边光）
-          float n = fbm(vec2(uv.y*14.0, uv.x*1.5) + 3.1)*0.22;
-          float e = p*1.5 - 0.25; float x = uv.x + n - 0.11;
-          m = smoothstep(e + 0.02, e - 0.02, x);
-          A = texture2D(uA, uv); B = texture2D(uB, uv);
-          float edge = exp(-pow((x - e)/0.012, 2.0));
-          gl_FragColor = mix(A, B, m) + vec4(0.95, 0.78, 0.32, 0.0)*edge*0.9; return;
-        } else if (uType == 4){     // dissolve 笔触溶解（沿斜向拉长的笔触噪声）
-          vec2 w = rot(q, 0.6)*vec2(3.5, 26.0);
-          float n = fbm(w + 7.0);
-          m = smoothstep(n - 0.06, n + 0.06, p*1.25 - 0.12);
-          A = texture2D(uA, uv); B = texture2D(uB, uv);
-        } else if (uType == 5){     // radial 从一颗星处圆形展开（参差金边）
-          vec2 o = (uv - vec2(0.72, 0.7))*vec2(uAspect, 1.0); float d = length(o);
-          float n = fbm(vec2(atan(o.y, o.x)*3.0, d*4.0))*0.18;
-          float R = p*1.9; m = smoothstep(R + 0.02, R - 0.02, d + n);
-          A = texture2D(uA, uv); B = texture2D(uB, uv);
-          float edge = exp(-pow((d + n - R)/0.015, 2.0));
-          gl_FragColor = mix(A, B, m) + vec4(1.0, 0.85, 0.45, 0.0)*edge; return;
-        } else if (uType == 6){     // leak 暖色漏光
-          A = texture2D(uA, uv); B = texture2D(uB, uv); m = smoothstep(0.3, 0.7, p);
-          float lx = uv.x - (p*1.6 - 0.3);
-          vec3 leak = vec3(1.0, 0.72, 0.35)*exp(-lx*lx*6.0)*bell*0.85 + vec3(1.0, 0.9, 0.6)*bell*0.18;
-          gl_FragColor = vec4(mix(A.rgb, B.rgb, m) + leak, 1.0); return;
-        } else if (uType == 7){     // whip 横向甩镜
-          float sh = bell*0.09;
-          A = blurA(uv + vec2(p*0.35, 0.0), vec2(sh, 0.0)); B = blurB(uv - vec2((1.0-p)*0.35, 0.0), vec2(sh, 0.0));
-          m = smoothstep(0.42, 0.58, p);
-        } else if (uType == 8){     // ink 墨蓝晕开
-          float n = fbm(q*2.2 + 11.0);
-          m = smoothstep(n - 0.04, n + 0.04, p*1.25 - 0.1);
-          A = texture2D(uA, uv); B = texture2D(uB, uv);
-          float rim = smoothstep(0.12, 0.0, abs(n - (p*1.25 - 0.1)));
-          gl_FragColor = mix(A, B, m)*(1.0 - 0.75*rim) + vec4(0.04, 0.08, 0.2, 0.0)*rim; return;
-        } else if (uType == 9){     // defocus 虚焦叠化
-          float b = bell*0.012;
-          vec4 a1 = blurA(uv, vec2(b, 0.0)), a2 = blurA(uv, vec2(0.0, b*uAspect));
-          vec4 b1 = blurB(uv, vec2(b, 0.0)), b2 = blurB(uv, vec2(0.0, b*uAspect));
-          A = (a1 + a2)*0.5; B = (b1 + b2)*0.5; m = smoothstep(0.2, 0.8, p);
-        } else {                    // 非转场：原样输出（所有帧走同一条管线，进出转场时画质不跳变）
-          gl_FragColor = texture2D(uA, uv); return;
+        if (uType < 0){             // 非转场：原样输出 + 调色（所有帧走同一条管线，进出转场时画质不跳变）
+          gl_FragColor = vec4(grade(texture2D(uA, uv).rgb, uLA), 1.0); return;
+        } else if (uType == 0){     // zoomthru：前一镜继续向前冲、径向拖影渐强；后一镜的拖影渐弱
+          A = radial(uA, zm(uv, 1.0 + 0.55*p*p, c), c, 0.10*p); B = radial(uB, uv, c, 0.07*(1.0 - p));
+          m = smoothstep(0.15, 0.85, p);
+        } else if (uType == 1){     // glow：后一镜里亮的地方（烛光、窗光）先浮现，带一点柔和的暖色光晕
+          A = tx(uA, uv); B = tx(uB, uv);
+          float lb = dot(disc(uB, uv, 0.02).rgb, vec3(0.3, 0.59, 0.11));
+          m = clamp((p - 0.5)*1.7 + 0.5 + (lb - 0.3)*0.9*bell, 0.0, 1.0); m = m*m*(3.0 - 2.0*m);
+          vec3 bloom = max(disc(uB, uv, 0.05).rgb - 0.35, 0.0)*vec3(1.0, 0.82, 0.6)*bell*0.8;
+          gl_FragColor = vec4(grade(mix(A.rgb, B.rgb, m) + bloom, lift), 1.0); return;
+        } else if (uType == 2){     // flow：两个画面被同一股平滑的旋流（无散度）带着流动，同时叠化
+          vec2 s = q*2.0 + vec2(0.0, uT*0.15); float e = 0.02, n0 = fbm3(s);
+          vec2 curl = vec2(fbm3(s + vec2(0.0, e)) - n0, -(fbm3(s + vec2(e, 0.0)) - n0))/e;
+          vec2 d = curl*0.012*bell/vec2(uAspect, 1.0);
+          A = tx(uA, uv + d*(0.4 + p)); B = tx(uB, uv - d*(1.4 - p));
+          m = smoothstep(0.2, 0.8, p);
+        } else if (uType == 3){     // iris：从漩涡中心向外柔和地晕开（边缘有一点笔触的参差），前一镜同时推近
+          vec2 o0 = vec2(0.45, 0.55), o = (uv - o0)*vec2(uAspect, 1.0); float d = length(o);
+          float n = (fbm(vec2(atan(o.y, o.x)*2.0, d*3.0 - uT*0.3)) - 0.5)*0.18;
+          float R = mix(-0.35, 1.6, p); m = 1.0 - smoothstep(R - 0.22, R + 0.22, d + n);
+          A = radial(uA, zm(uv, 1.0 + 0.18*p, o0), o0, 0.04*p); B = tx(uB, uv);
+        } else if (uType == 4){     // paintwipe：一笔宽刷从左扫到右，刷痕边缘柔和；画面随之微微横移（像镜头向右摇）
+          float n = (fbm(vec2(uv.y*7.0, uv.x*1.2 + 2.0)) - 0.5)*0.16, e = mix(-0.25, 1.25, p);
+          m = 1.0 - smoothstep(e - 0.1, e + 0.1, uv.x + n);
+          A = tx(uA, zm(uv, 1.0 + 0.03*p, c) + vec2(0.012*p, 0.0)); B = tx(uB, zm(uv, 1.03 - 0.03*p, c) - vec2(0.012*(1.0 - p), 0.0));
+        } else if (uType == 5){     // dissolve：柔焦叠化
+          A = disc(uA, uv, 0.004*bell); B = disc(uB, uv, 0.004*bell); m = smoothstep(0.1, 0.9, p);
+        } else if (uType == 6){     // pan：前一镜向左移出、后一镜从右侧移入，中段叠化，带一点横向动态模糊
+          vec2 bl = vec2(0.012*bell, 0.0);
+          A = dirb(uA, uv + vec2(0.10*p, 0.0), bl); B = dirb(uB, uv - vec2(0.10*(1.0 - p), 0.0), bl); m = smoothstep(0.25, 0.75, p);
+        } else if (uType == 7){     // leak：一束柔和的暖光从左往右扫过，叠化在光最亮时完成（滤色叠加，不会过曝成死白）
+          A = tx(uA, uv); B = tx(uB, uv); m = smoothstep(0.25, 0.75, p);
+          vec2 o = vec2(uv.x - mix(-0.3, 1.3, p), (uv.y - 0.6)*0.6);
+          vec3 L = vec3(1.0, 0.74, 0.42)*(exp(-dot(o, o)*5.0)*0.45 + 0.08)*bell;
+          gl_FragColor = vec4(grade(1.0 - (1.0 - mix(A.rgb, B.rgb, m))*(1.0 - L), lift), 1.0); return;
+        } else if (uType == 8){     // whip：画面向左加速甩出、后一镜减速甩入，两者在切点处速度相同，模糊在切点最强
+          float bl = 0.10*pow(bell, 1.5);
+          A = dirb(uA, uv + vec2(0.45*p*p, 0.0), vec2(bl, 0.0)); B = dirb(uB, uv - vec2(0.45*(1.0 - p)*(1.0 - p), 0.0), vec2(bl, 0.0));
+          m = smoothstep(0.35, 0.65, p);
+        } else if (uType == 9){     // ink：后一镜像颜料在湿纸上一团团化开，边缘柔、略带水痕的流动
+          float n = fbm(q*1.6 + 11.0)*0.85 + fbm(q*5.0 - 3.0)*0.15;
+          m = smoothstep(n - 0.14, n + 0.14, mix(-0.15, 1.15, p));
+          vec2 w = (vec2(fbm(q*3.0 + 5.0), fbm(q*3.0 + 9.0)) - 0.5)*0.03*(4.0*m*(1.0 - m));
+          A = tx(uA, uv + w); B = tx(uB, uv - w);
+        } else {                    // defocus：前一镜失焦、后一镜从虚到实
+          A = disc(uA, uv, 0.012*smoothstep(0.0, 0.6, p)); B = disc(uB, uv, 0.012*(1.0 - smoothstep(0.4, 1.0, p)));
+          m = smoothstep(0.3, 0.7, p);
         }
-        gl_FragColor = mix(A, B, m);
+        gl_FragColor = vec4(grade(mix(A, B, m).rgb, lift), 1.0);
       }`,
     depthTest: false, depthWrite: false,
   });
   trScene = new THREE.Scene();
   trScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), trMat));
 }
+/* 镜头在自己的时间段之外被渲染时（转场的前后半段），相机顺着边界处的速度继续滑行、逐渐减速，
+   不会在切点前后突然定住、或从静止突然起步。镜头自己在段外仍在运动的（例如隧道）不干预。 */
+const TAIL = 0.6, H1 = 1/30;
+function camPose(act, t){ act.update(t, t - act.start, act.ctx); const c = V.camera; return [c.position.clone(), c.quaternion.clone(), c.fov]; }
+function coast(act, t){
+  const out = t >= act.end ? 1 : t < act.start ? -1 : 0;
+  if (!out) return null;
+  const te = out > 0 ? act.end - 1e-4 : act.start;
+  const [p0, q0, f0] = camPose(act, te), [p1, q1, f1] = camPose(act, te - out*H1), [p2, q2] = camPose(act, te + out*H1);
+  if (p0.distanceTo(p2) > 0.5*p0.distanceTo(p1) + 1e-5 || q0.angleTo(q2) > 0.5*q0.angleTo(q1) + 1e-6) return null;
+  const k = TAIL*(1 - Math.exp(-Math.abs(t - te)/TAIL))/H1;     // 滑行量 = 边界处每帧的运动 × k
+  const pos = p0.clone().add(p0.clone().sub(p1).multiplyScalar(k));
+  const dq = q0.clone().multiply(q1.clone().invert()), sgn = dq.w < 0 ? -1 : 1, sw = Math.sqrt(Math.max(0, 1 - dq.w*dq.w));
+  const quat = q0.clone();
+  if (sw > 1e-7) quat.premultiply(new THREE.Quaternion().setFromAxisAngle(V.v3(dq.x*sgn/sw, dq.y*sgn/sw, dq.z*sgn/sw), 2*Math.acos(Math.min(1, Math.abs(dq.w)))*k));
+  return [pos, quat, f0 + (f0 - f1)*k];
+}
+V._coast = coast;      // 调试用
 const CLEAR_RT = new THREE.Color().setRGB(7/255, 11/255, 30/255, THREE.LinearSRGBColorSpace);   // 离屏纹理不做色彩转换，直接写入 sRGB 数值
 function renderShot(act, t, target){
   V.scene.fog = V.DEFAULT_FOG();
@@ -403,7 +439,11 @@ function renderShot(act, t, target){
   for (const h of V.hooks.pre) h(t, act);
   for (const s of V.shots) s.ctx.group.visible = (s === act);
   if (act && !act.broken){
-    try { act.update(t, t - act.start, act.ctx); }
+    try {
+      const cst = coast(act, t);
+      act.update(t, t - act.start, act.ctx);
+      if (cst){ const c = V.camera; c.position.copy(cst[0]); c.quaternion.copy(cst[1]); c.fov = cst[2]; c.updateProjectionMatrix(); }
+    }
     catch(e){ console.error('[update ' + act.id + ' @' + t.toFixed(2) + ']', e); }
   }
   if (window.__camOverride) window.__camOverride(V.camera, act);     // 调试用：覆盖机位（正式渲染不会设置）
@@ -420,7 +460,7 @@ window.probeCam = function(t){
   const c = V.camera, q = c.quaternion;
   return [act ? act.id : '', c.position.x, c.position.y, c.position.z, q.x, q.y, q.z, q.w, c.fov];
 };
-V.activeTransition = t => { for (const c in V.TRANS){ const [ty, d] = V.TRANS[c]; if (Math.abs(t - c) < d/2) return { c: +c, ty, d }; } return null; };
+V.activeTransition = t => { for (const c in V.TRANS){ const [ty, d, sh = 0] = V.TRANS[c]; if (Math.abs(t - c - sh) < d/2) return { c: +c, ty, d, t0: +c + sh - d/2 }; } return null; };
 window.render = function(t){
   buildAll();
   const tr = V.activeTransition(t);
@@ -430,16 +470,17 @@ window.render = function(t){
     act = V.activeShot(t);
     renderShot(act, t, rtA);
     trMat.uniforms.uA.value = rtA.texture; trMat.uniforms.uB.value = rtA.texture;
-    trMat.uniforms.uP.value = 0; trMat.uniforms.uType.value = -1;
+    trMat.uniforms.uP.value = 0; trMat.uniforms.uType.value = -1; trMat.uniforms.uLA.value = trMat.uniforms.uLB.value = liftOf(act);
     V.renderer.setRenderTarget(null);
     V.renderer.render(trScene, trCam);
   } else {
     const a = V.activeShot(tr.c - 1e-3), b = V.activeShot(tr.c);
     renderShot(a, t, rtA);
     renderShot(b, t, rtB);
-    const p = V.smooth(V.clamp((t - (tr.c - tr.d/2))/tr.d, 0, 1));
+    const p = V.smooth(V.clamp((t - tr.t0)/tr.d, 0, 1));
     trMat.uniforms.uA.value = rtA.texture; trMat.uniforms.uB.value = rtB.texture;
     trMat.uniforms.uP.value = p; trMat.uniforms.uT.value = t; trMat.uniforms.uType.value = TR_TYPES.indexOf(tr.ty);
+    trMat.uniforms.uLA.value = liftOf(a); trMat.uniforms.uLB.value = liftOf(b);
     V.renderer.setRenderTarget(null);
     V.renderer.render(trScene, trCam);
     act = t < tr.c ? a : b;

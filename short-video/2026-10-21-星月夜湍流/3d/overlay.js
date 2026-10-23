@@ -195,12 +195,12 @@ function drawWipe(t){
 }
 
 function drawVignette(){
-  const g = oc.createRadialGradient(960, 540, 520, 960, 540, 1180);
-  g.addColorStop(0, 'rgba(4,5,14,0)'); g.addColorStop(1, 'rgba(4,5,14,.55)');
+  const g = oc.createRadialGradient(960, 540, 560, 960, 540, 1200);       // 轻暗角（字幕自带阴影，底部只需略压暗）
+  g.addColorStop(0, 'rgba(4,5,14,0)'); g.addColorStop(1, 'rgba(4,5,14,.3)');
   oc.fillStyle = g; oc.fillRect(0,0,1920,1080);
-  const b = oc.createLinearGradient(0, 760, 0, 1080);
-  b.addColorStop(0, 'rgba(4,5,14,0)'); b.addColorStop(1, 'rgba(4,5,14,.78)');
-  oc.fillStyle = b; oc.fillRect(0, 760, 1920, 320);
+  const b = oc.createLinearGradient(0, 800, 0, 1080);
+  b.addColorStop(0, 'rgba(4,5,14,0)'); b.addColorStop(1, 'rgba(4,5,14,.48)');
+  oc.fillStyle = b; oc.fillRect(0, 800, 1920, 280);
 }
 
 function drawEndCards(t){
