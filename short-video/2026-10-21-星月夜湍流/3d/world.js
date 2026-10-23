@@ -151,18 +151,21 @@ W.add(terrain);
 // 近处地面
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 260).rotateX(-Math.PI/2).translate(0,-0.05,60), new THREE.MeshBasicMaterial({color: 0x0d1736, fog: true}));
 W.add(ground);
-// 山上的笔触（沿等高线方向），从山脚一直铺到山顶；山脚和近处只用深蓝，不然会和天空混在一起，像山底透明
-const hillPts = [];
+// 山上的笔触（沿等高线方向），从山脚一直铺到山顶；山脚和近处只用深蓝，不然会和天空混在一起，像山底透明。
+// 用单独的随机数：主随机数 R 还要接着摆村舍、树、柏树，山的笔触怎么改都不能打乱它们的位置
+const RH = V.rng(24601), hillPts = [];
 for (let i=0; i<60000 && hillPts.length < 7000; i++){
-  const far = hillPts.length >= 2600, x = -440 + R()*880, z = far ? -150 - R()*420 : -60 - R()*110, h = hAt(x, z);
+  const far = hillPts.length >= 2600, x = -440 + RH()*880, z = far ? -150 - RH()*420 : -60 - RH()*110, h = hAt(x, z);
   if (h < (far ? 6 : 2)) continue;
   const dzdx = (hAt(x+1,z) - hAt(x-1,z))/2, k = far ? 1.6 : 1;
-  hillPts.push([x, h + 0.4*k, z, 1, dzdx, 0.15*(R()-0.5), (5+R()*5)*k, (far ? 1.6+R()*0.8 : 1.1+R()*0.6)*k,
-    V.hex(pick(far ? ['#1a2c5c','#22386e','#2c4680','#1c3456','#3a5890','#5878a8'] : h < 12 ? ['#13204a','#1a2a58','#1c2f63','#16264f','#22386e'] : ['#1c2f63','#2a4480','#25386e','#1e3a5c','#304c88','#3b5a96'])), 0.9]);
+  const pk = a => a[Math.floor(RH()*a.length)];
+  hillPts.push([x, h + 0.4*k, z, 1, dzdx, 0.15*(RH()-0.5), (5+RH()*5)*k, (far ? 1.6+RH()*0.8 : 1.1+RH()*0.6)*k,
+    V.hex(pk(far ? ['#1a2c5c','#22386e','#2c4680','#1c3456','#3a5890','#5878a8'] : h < 12 ? ['#13204a','#1a2a58','#1c2f63','#16264f','#22386e'] : ['#1c2f63','#2a4480','#25386e','#1e3a5c','#304c88','#3b5a96'])), 0.9]);
 }
 const hillS = new V.Strokes(hillPts.length, {renderOrder: 2});
 hillPts.forEach((p, i) => hillS.set(i, ...p));
 hillS.commit(); W.add(hillS.mesh);
+for (let i=0;i<2600*6;i++) R();                     // 跳过旧版山坡笔触用掉的随机数（2600 笔 × 6 个），村舍、树、柏树保持原来的布局
 // 村庄地面上的笔触
 const fieldS = new V.Strokes(1400, {renderOrder: 2});
 for (let i=0;i<1400;i++){
@@ -345,16 +348,21 @@ const fieldEdge = (x, z) => Math.min(x - WHEAT.x0, WHEAT.x1 - x, z - WHEAT.z0, W
   const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color: 0x3a3018, fog: true}));
   m.position.set((WHEAT.x0+WHEAT.x1)/2, 0.04, (WHEAT.z0+WHEAT.z1)/2); W.add(m);
 }
+const RW = V.rng(5151), pickW = a => a[Math.floor(RW()*a.length)];      // 麦田单独用一串随机数
+for (let i=0;i<11000;i++){                                                      // 跳过旧版麦田用掉的随机数：后面的田垄保持原来的样子
+  const x = WHEAT.x0 + RL()*(WHEAT.x1-WHEAT.x0), z = WHEAT.z0 + RL()*(WHEAT.z1-WHEAT.z0);
+  if (!inLake(x, z, 1.05)){ RL(); RL(); RL(); RL(); RL(); }
+}
 const wheatData = [];
 const HEADC = ['#d8b45a','#e6c46a','#c9a24a','#f0d27a','#b8913e','#dcb860'], HEADG = ['#b0aa5a','#a09c52','#bcae60'], STEMC = ['#6a5a2c','#7a6a34','#5a4c26','#706232'];
 for (let z = WHEAT.z0 - 4; z < WHEAT.z1 + 4; z += 0.46){            // 一垄一垄
-  for (let x = WHEAT.x0 - 4 + RL()*0.3; x < WHEAT.x1 + 4; x += 0.2 + RL()*0.18){
-    const px = x + (RL()-0.5)*0.16, pz = z + (RL()-0.5)*0.3, e = fieldEdge(px, pz);
+  for (let x = WHEAT.x0 - 4 + RW()*0.3; x < WHEAT.x1 + 4; x += 0.2 + RW()*0.18){
+    const px = x + (RW()-0.5)*0.16, pz = z + (RW()-0.5)*0.3, e = fieldEdge(px, pz);
     if (e < 0 || inLake(px, pz, 1.05)) continue;
     const nh = vnW(px*0.07, pz*0.07), ng = vnW(px*0.09 + 7, pz*0.09 - 3);
-    const h = (1.0 + 0.55*nh + 0.25*RL())*(0.7 + 0.3*V.clamp(e/3, 0, 1));
-    const head = V.hex(ng > 0.62 && RL() < 0.7 ? pickL(HEADG) : pickL(HEADC)).map(c => c*0.8);
-    wheatData.push({ x: px, z: pz, h, hl: 0.15 + 0.07*RL(), ph: RL()*6.28, lean: (RL()-0.5)*0.12, head, stem: V.hex(pickL(STEMC)).map(c => c*0.62) });
+    const h = (1.0 + 0.55*nh + 0.25*RW())*(0.7 + 0.3*V.clamp(e/3, 0, 1));
+    const head = V.hex(ng > 0.62 && RW() < 0.7 ? pickW(HEADG) : pickW(HEADC)).map(c => c*0.8);
+    wheatData.push({ x: px, z: pz, h, hl: 0.15 + 0.07*RW(), ph: RW()*6.28, lean: (RW()-0.5)*0.12, head, stem: V.hex(pickW(STEMC)).map(c => c*0.62) });
   }
 }
 const stemS = new V.Strokes(wheatData.length*2, {renderOrder: 2}); W.add(stemS.mesh);
