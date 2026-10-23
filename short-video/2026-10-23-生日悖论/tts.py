@@ -1,13 +1,19 @@
-# usage: kzh_tts.py <model_dir> <voice> <speed> <out.wav> <text>
-import sys, soundfile as sf
-from kokoro_onnx import Kokoro
-from misaki import zh
-d, voice, speed, out, text = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4], sys.argv[5]
-k = Kokoro(f"{d}/kokoro-v1.1-zh.onnx", f"{d}/voices-v1.1-zh.bin")
-if voice == "list":
-    print(sorted(k.get_voices())); sys.exit()
-g2p = zh.ZHG2P(version="1.1")
-ph, _ = g2p(text)
-samples, sr = k.create(ph, voice=voice, speed=speed, is_phonemes=True)
-sf.write(out, samples, sr)
-print(out, len(samples) / sr)
+# usage: tts.py <model_dir> <jobs.json> [fp32|bf16]   (Qwen3-TTS CustomVoice, CPU)
+# jobs.json: [{"out": "...wav", "text": "...", "speaker": "Uncle_Fu", "instruct": "...", "seed": 1}]
+import json, sys, time
+import torch, soundfile as sf
+from qwen_tts import Qwen3TTSModel
+
+model_dir, jobs_path = sys.argv[1], sys.argv[2]
+dtype = {"fp32": torch.float32, "bf16": torch.bfloat16}[sys.argv[3] if len(sys.argv) > 3 else "fp32"]
+t0 = time.time()
+model = Qwen3TTSModel.from_pretrained(model_dir, device_map="cpu", dtype=dtype, attn_implementation="sdpa")
+print(f"loaded in {time.time() - t0:.1f}s", flush=True)
+for job in json.load(open(jobs_path, encoding="utf-8")):
+    torch.manual_seed(job.get("seed", 1))
+    t = time.time()
+    wavs, sr = model.generate_custom_voice(
+        text=job["text"], language="Chinese", speaker=job["speaker"], instruct=job.get("instruct", ""),
+    )
+    sf.write(job["out"], wavs[0], sr)
+    print(f'{job["out"]}: {len(wavs[0]) / sr:.2f}s audio in {time.time() - t:.1f}s', flush=True)
