@@ -200,15 +200,16 @@ V.shot({ id: 's03', start: 20, end: 34, origin: [0, 0, 0], useWorld: true,
     }
 
     /* ================= 2. 窗外：麦田（动态摆动）+ 低矮石墙 ================= */
+    const wallDabs = [];
     {
       const fieldBase = new THREE.Mesh(new THREE.PlaneGeometry(140, 84).rotateX(-Math.PI/2).translate(0, 0.04, 25), new THREE.MeshBasicMaterial({color: 0x191c1c, fog: true}));
       G.add(fieldBase);
       const wallM = new THREE.Mesh(new THREE.BoxGeometry(140, 2.0, 0.8), new THREE.MeshBasicMaterial({color: 0x262a38, fog: true}));
       wallM.position.set(0, 1.0, -17); G.add(wallM);
       const STONE = ['#3e4252', '#343848', '#4a4e60', '#2c3040', '#444860'].map(H);
-      for (let i = 0; i < 900; i++){
+      for (let i = 0; i < 900; i++){                           // 石墙笔触只属于这个镜头（挂在世界上的话，开场飞过麦田时会在村前出现一道灰墙）
         const x = -70 + R()*140, y = 0.2 + R()*1.7, a = (R() - 0.5)*0.4;
-        dab(x, y, -16.55, Math.cos(a), Math.sin(a), 0, 1.0 + R()*0.8, 0.45 + R()*0.2, pick(STONE), 0.95);
+        wallDabs.push([x, y, -16.55, Math.cos(a), Math.sin(a), 0, 1.0 + R()*0.8, 0.45 + R()*0.2, pick(STONE), 0.95]);
       }
     }
     // 麦秆：按到窗口的距离对数均匀采样，笔触尺寸 ∝ 距离 → 屏幕上大小一致、密度均匀
@@ -268,6 +269,9 @@ V.shot({ id: 's03', start: 20, end: 34, origin: [0, 0, 0], useWorld: true,
     s.roomS = new V.Strokes(dabs.length, {renderOrder: 2});
     dabs.forEach((d, i) => s.roomS.set(i, ...d));
     s.roomS.commit(); RM.add(s.roomS.mesh);
+    s.wallS = new V.Strokes(wallDabs.length, {renderOrder: 2});
+    wallDabs.forEach((d, i) => s.wallS.set(i, ...d));
+    s.wallS.commit(); G.add(s.wallS.mesh);
 
     /* ================= 4. 墙上的做旧纸质铭牌（左上角一枚图钉，右侧纸面微微离墙卷起） ================= */
     {

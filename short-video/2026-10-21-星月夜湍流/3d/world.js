@@ -118,6 +118,13 @@ const moonF = V.world.features[2];
 moonCard.mesh.scale.setScalar(moonF.rW*2.6); moonCard.mesh.position.copy(moonF.C).addScaledVector(moonF.n, -2);
 moonCard.mesh.lookAt(P0); moonCard.mesh.material.depthWrite = false; moonCard.mesh.renderOrder = 4;
 W.add(moonCard.mesh);
+/* 天空层（笔触、星光、月亮）跟底色一样：最先画、不做深度测试，地形和房屋总能盖住它们。
+   否则镜头升高后，比天空壳更远的远山会被天空笔触画在上面，看起来像透明的。 */
+for (const [mesh, ro] of [[sky.mesh, -9], [glow.mesh, -8], [moonCard.mesh, -7]]){
+  const m = mesh.material; m.transparent = false; m.depthTest = false; m.depthWrite = false;
+  if (m.blending === THREE.NormalBlending){ m.blending = THREE.CustomBlending; m.blendSrc = THREE.SrcAlphaFactor; m.blendDst = THREE.OneMinusSrcAlphaFactor; }
+  mesh.renderOrder = ro;
+}
 
 /* ---------- 地形：远山 ---------- */
 const ridgeH = x => { const u = 0.5 + Math.atan2(x, 180)/(AZ_SPAN*D2R); const el = elOf(hz(u)); return P0.y + 180*Math.tan(el) - 2; };
@@ -142,13 +149,17 @@ W.add(terrain);
 // 近处地面
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 260).rotateX(-Math.PI/2).translate(0,-0.05,60), new THREE.MeshBasicMaterial({color: 0x0d1736, fog: true}));
 W.add(ground);
-// 山上的笔触（沿等高线方向）
-const hillS = new V.Strokes(2600, {renderOrder: 2});
-for (let i=0;i<2600;i++){
-  const x = -420 + R()*840, z = -60 - R()*400, y = hAt(x,z) + 0.4;
-  const dzdx = (hAt(x+1,z) - hAt(x-1,z))/2;
-  hillS.set(i, x, y, z, 1, dzdx, 0.15*(R()-0.5), 5+R()*5, 1.6+R()*0.8, V.hex(pick(['#1c2f63','#2a4480','#3b5a96','#25386e','#6f8fbf','#1e3a5c'])), 0.9);
+// 山上的笔触（沿等高线方向）。只铺在山坡上：笔触总是正对镜头，铺在山脚的平地上时，从低处平视会立成一排灰白的"墙"
+const hillPts = [];
+for (let i=0; i<60000 && hillPts.length < 7000; i++){
+  const far = hillPts.length >= 2600, x = -440 + R()*880, z = far ? -150 - R()*420 : -60 - R()*110, h = hAt(x, z);
+  if (h < (far ? 6 : 9)) continue;                                                    // 近处山坡只铺上半段
+  const dzdx = (hAt(x+1,z) - hAt(x-1,z))/2, k = far ? 1.6 : 1;
+  hillPts.push([x, h + 0.4*k, z, 1, dzdx, 0.15*(R()-0.5), (5+R()*5)*k, (far ? 1.6+R()*0.8 : 1.1+R()*0.6)*k,
+    V.hex(pick(far ? ['#1a2c5c','#22386e','#2c4680','#1c3456','#3a5890','#5878a8'] : ['#1c2f63','#2a4480','#25386e','#1e3a5c','#304c88'])), 0.9]);
 }
+const hillS = new V.Strokes(hillPts.length, {renderOrder: 2});
+hillPts.forEach((p, i) => hillS.set(i, ...p));
 hillS.commit(); W.add(hillS.mesh);
 // 村庄地面上的笔触
 const fieldS = new V.Strokes(1400, {renderOrder: 2});
@@ -319,22 +330,33 @@ for (let i=0;i<900;i++){ const a = RL()*Math.PI*2, m = 0.97 + RL()*0.09;
   reedData.push({x: LAKE.x + Math.cos(a)*LAKE.rx*m, z: LAKE.z + Math.sin(a)*LAKE.rz*m, h: 1.0+RL()*1.6, ph: RL()*6.28, col: V.hex(pickL(['#1c2e26','#26382c','#2e4030','#3a4a32']))}); }
 const reedS = new V.Strokes(reedData.length, {renderOrder: 2}); W.add(reedS.mesh);
 
-/* ---------- 农田：西侧麦田（风中起伏的麦秆笔触）+ 东侧犁过的田垄 ---------- */
+/* ---------- 农田：西侧麦田 + 东侧犁过的田垄 ----------
+   麦子按垄成行：每株 = 两节微弯的麦秆 + 一个下垂的麦穗；株高、颜色按低频噪声成片变化，田边不规则；
+   风是一道道推过去的麦浪：浪峰处麦秆弯得更厉害、麦穗被月光照亮。 */
 const WHEAT = V.world.WHEAT = { x0: -76, x1: -24, z0: -24, z1: 44 };
+const hashW = (x, z) => { const s = Math.sin(x*127.1 + z*311.7)*43758.5453; return s - Math.floor(s); };
+const vnW = (x, z) => { const xi = Math.floor(x), zi = Math.floor(z), xf = x - xi, zf = z - zi, u = xf*xf*(3-2*xf), v = zf*zf*(3-2*zf);
+  return V.lerp(V.lerp(hashW(xi, zi), hashW(xi+1, zi), u), V.lerp(hashW(xi, zi+1), hashW(xi+1, zi+1), u), v); };
+const fieldEdge = (x, z) => Math.min(x - WHEAT.x0, WHEAT.x1 - x, z - WHEAT.z0, WHEAT.z1 - z) + 7*(vnW(x*0.12, z*0.12) - 0.5);   // 到田边的距离（> 0 在田里）
 {
-  const g = new THREE.PlaneGeometry(WHEAT.x1-WHEAT.x0, WHEAT.z1-WHEAT.z0).rotateX(-Math.PI/2);
-  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color: 0x2c2a1c, fog: true}));
+  const g = new THREE.PlaneGeometry(WHEAT.x1-WHEAT.x0 + 8, WHEAT.z1-WHEAT.z0 + 8).rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color: 0x3a3018, fog: true}));
   m.position.set((WHEAT.x0+WHEAT.x1)/2, 0.04, (WHEAT.z0+WHEAT.z1)/2); W.add(m);
 }
 const wheatData = [];
-const WCOL = ['#c8a040','#d8b450','#b08a30','#e0c060','#a08030','#c09848'].map(h => V.hex(h).map(c => c*0.62));
-const WGRN = ['#5a6a34','#4a5a2c','#6a7a3a'].map(h => V.hex(h).map(c => c*0.7));
-for (let i=0;i<11000;i++){
-  const x = WHEAT.x0 + RL()*(WHEAT.x1-WHEAT.x0), z = WHEAT.z0 + RL()*(WHEAT.z1-WHEAT.z0);
-  if (inLake(x, z, 1.05)) continue;
-  wheatData.push({x, z, h: 1.1+RL()*0.9, ph: RL()*6.28, wid: 0.10+RL()*0.06, col: RL()<.85 ? pickL(WCOL) : pickL(WGRN)});
+const HEADC = ['#d8b45a','#e6c46a','#c9a24a','#f0d27a','#b8913e','#dcb860'], HEADG = ['#b0aa5a','#a09c52','#bcae60'], STEMC = ['#6a5a2c','#7a6a34','#5a4c26','#706232'];
+for (let z = WHEAT.z0 - 4; z < WHEAT.z1 + 4; z += 0.46){            // 一垄一垄
+  for (let x = WHEAT.x0 - 4 + RL()*0.3; x < WHEAT.x1 + 4; x += 0.2 + RL()*0.18){
+    const px = x + (RL()-0.5)*0.16, pz = z + (RL()-0.5)*0.3, e = fieldEdge(px, pz);
+    if (e < 0 || inLake(px, pz, 1.05)) continue;
+    const nh = vnW(px*0.07, pz*0.07), ng = vnW(px*0.09 + 7, pz*0.09 - 3);
+    const h = (1.0 + 0.55*nh + 0.25*RL())*(0.7 + 0.3*V.clamp(e/3, 0, 1));
+    const head = V.hex(ng > 0.62 && RL() < 0.7 ? pickL(HEADG) : pickL(HEADC)).map(c => c*0.8);
+    wheatData.push({ x: px, z: pz, h, hl: 0.15 + 0.07*RL(), ph: RL()*6.28, lean: (RL()-0.5)*0.12, head, stem: V.hex(pickL(STEMC)).map(c => c*0.62) });
+  }
 }
-const wheatS = new V.Strokes(wheatData.length, {renderOrder: 2}); W.add(wheatS.mesh);
+const stemS = new V.Strokes(wheatData.length*2, {renderOrder: 2}); W.add(stemS.mesh);
+const headS = new V.Strokes(wheatData.length, {renderOrder: 2}); W.add(headS.mesh);
 { // 东侧田垄（静态）
   const rows = [];
   for (let r=0;r<26;r++){ const z = -18 + r*2.8;
@@ -370,13 +392,25 @@ function updateLakeAndFields(t){
   reedData.forEach((d, i) => { const sw = 0.25*Math.sin(t*1.3 + d.ph);
     reedS.set(i, d.x + sw*0.5, d.h/2, d.z, sw, 1, 0, d.h, 0.12, d.col, 0.95); });
   reedS.commit();
-  // 麦浪：沿 x 方向传播的风
+  // 麦浪：沿风向一道道推过去；离镜头太近的麦株淡出，免得在镜头前糊成大色块
+  const WX = 0.94, WZ = 0.34, col = [0, 0, 0];
   wheatData.forEach((d, i) => {
-    const gust = Math.sin(d.x*0.12 - t*1.6 + d.z*0.05) + 0.4*Math.sin(d.z*0.3 + t*0.9 + d.ph);
-    const lean = 0.32*gust, br = 0.85 + 0.25*Math.max(0, gust);
-    wheatS.set(i, d.x + lean*d.h*0.45, d.h*0.5, d.z, lean, 1, 0.12*Math.sin(d.ph), d.h, d.wid, d.col.map(c => Math.min(1, c*br)), 0.95);
+    const sAlong = d.x*WX + d.z*WZ;
+    const wave = 0.5 + 0.5*Math.sin(sAlong*0.21 - t*1.9 + 0.8*Math.sin(d.z*0.045 + t*0.27));
+    const th = 0.08 + 0.46*wave*wave + 0.05*Math.sin(t*3.1 + d.ph) + d.lean;          // 弯曲角：浪峰处最弯
+    const a1 = th*0.35, a2 = th, a3 = th + 0.45, h1 = d.h*0.55, h2 = d.h*0.45;
+    const s1 = Math.sin(a1), c1 = Math.cos(a1), s2 = Math.sin(a2), c2 = Math.cos(a2), s3 = Math.sin(a3), c3 = Math.cos(a3);
+    const mx = d.x + WX*s1*h1, my = c1*h1, mz = d.z + WZ*s1*h1, tx = mx + WX*s2*h2, ty = my + c2*h2, tz = mz + WZ*s2*h2;
+    const dist = Math.hypot(tx - cam.x, ty - cam.y, tz - cam.z), fade = V.smooth(V.clamp((dist - 0.5)/1.4, 0, 1));
+    if (fade <= 0){ stemS.hide(i*2); stemS.hide(i*2+1); headS.hide(i); return; }
+    const sb = 0.8 + 0.25*wave, hb = 0.72 + 0.6*wave;                                   // 浪峰处被月光照亮
+    for (let k=0;k<3;k++) col[k] = d.stem[k]*sb;
+    stemS.set(i*2, d.x + WX*s1*h1/2, my/2, d.z + WZ*s1*h1/2, WX*s1, c1, WZ*s1, h1*1.06, 0.034, col, 0.95*fade);
+    stemS.set(i*2+1, (mx + tx)/2, (my + ty)/2, (mz + tz)/2, WX*s2, c2, WZ*s2, h2*1.06, 0.03, col, 0.95*fade);
+    for (let k=0;k<3;k++) col[k] = Math.min(1, d.head[k]*hb);
+    headS.set(i, tx + WX*s3*d.hl*0.45, ty + c3*d.hl*0.45, tz + WZ*s3*d.hl*0.45, WX*s3, c3, WZ*s3, d.hl, 0.038, col, fade);   // 麦穗细长（长宽约 5:1）
   });
-  wheatS.commit();
+  stemS.commit(); headS.commit();
 }
 
 /* ---------- 主角：梵高（笔触人像），站在病房窗前，左手托调色板，右手执笔 ---------- */

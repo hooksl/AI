@@ -1,7 +1,7 @@
 /* vangogh.js — 主角梵高（按 1889 年圣雷米时期自画像的特征）
    比例：约 7 头身、瘦长；脸：高眉骨、深眼窝、长而直的鼻子、突出的颧骨、凹陷的脸颊、收窄的下颌；
    头发：剪得很短的橙红色，额头高、太阳穴处发际线后退；胡须：紧贴下颌的短须，连着鬓角，唇上有髭；
-   眼睛：蓝绿色虹膜，上眼睑压住虹膜上缘；衣着：带翻领与纽扣的蓝色外套，白衬衫领；
+   眼睛：蓝绿色虹膜，上眼睑压住虹膜上缘；衣着：带纽扣的蓝色外套，白衬衫领；手按真人比例（约 19 厘米长）；
    姿势：左手托调色板，右手执笔伸向画布。头部以真人头部扫描为底改形、重新上色（见下方"头"）。
    局部坐标：地面 y=0，面朝 -z，右手在 +x。全部在加载时构建一次，画面只由 t 决定。 */
 (function(){
@@ -18,9 +18,7 @@ const coatTex = canvasTex(512, 512, (c, W, H) => { c.fillStyle = '#34528e'; c.fi
 const trouserTex = canvasTex(256, 256, (c, W, H) => { c.fillStyle = '#2c3246'; c.fillRect(0, 0, W, H);
   dabs(c, W, H, 500, ['#3a4258','#22283a','#424a62'], 28, 6, Math.PI/2, 0.4); });
 const Mt = {
-  skin: new THREE.MeshLambertMaterial({ color: 0xc89870 }),
   coat: new THREE.MeshLambertMaterial({ map: coatTex }),
-  lapel: new THREE.MeshLambertMaterial({ map: coatTex, color: 0xb8c4e0, side: THREE.DoubleSide }),
   shirt: new THREE.MeshLambertMaterial({ color: 0xe0dccc, side: THREE.DoubleSide }),
   trousers: new THREE.MeshLambertMaterial({ map: trouserTex }),
   shoe: new THREE.MeshLambertMaterial({ color: 0x2a1c14 }),
@@ -215,14 +213,9 @@ const coatR = y => { for (let i=0;i<prof.length-1;i++){ const [r0,y0] = prof[i],
     pa.setXYZ(i, x*fold, y, z*0.68*fold); }
   g.computeVertexNormals();
   const torso = mesh(g, Mt.coat); torso.rotation.x = 0.035;                                  // 微微含胸
-  for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(1, 18, 12), Mt.coat, VG, [sx*0.48, 3.82, 0.0], [0, 0, -sx*0.35], [0.15, 0.1, 0.2]);   // 肩头：扁平、顺着肩线下斜
-  // 翻领、衬衫领与纽扣（贴在胸前）
+  for (const sx of [-1, 1]) mesh(new THREE.SphereGeometry(1, 18, 12), Mt.coat, VG, [sx*0.5, 3.88, 0.02], [0, 0, -sx*0.4], [0.17, 0.11, 0.2]);   // 肩头：扁平、顺着肩线下斜
+  // 衬衫领口与纽扣（片中只从背后、侧后方看他，平面的翻领贴不住弧形的胸口、会浮在外面露出来，所以不做）
   const zf = y => -coatR(y)*0.68 - 0.012;
-  const lap = (sx) => { const s = new THREE.Shape(); s.moveTo(sx*0.06, 4.0); s.lineTo(sx*0.26, 3.86); s.lineTo(sx*0.17, 3.5); s.lineTo(sx*0.02, 3.22); s.lineTo(sx*0.06, 4.0);
-    const m = mesh(new THREE.ShapeGeometry(s), Mt.lapel, VG, [0, 0, zf(3.7) - 0.004]); m.rotation.x = -0.18; };
-  lap(-1); lap(1);
-  { const s = new THREE.Shape(); s.moveTo(-0.07, 4.02); s.lineTo(0.07, 4.02); s.lineTo(0.0, 3.62); s.lineTo(-0.07, 4.02);
-    const m = mesh(new THREE.ShapeGeometry(s), Mt.shirt, VG, [0, 0, zf(3.8) + 0.002]); m.rotation.x = -0.2; }
   mesh(new THREE.TorusGeometry(0.115, 0.03, 8, 24, Math.PI*1.3), Mt.shirt, VG, [0, 4.07, -0.04], [Math.PI/2 + 0.2, 0, Math.PI*0.85]);   // 衬衫领口
   for (const y of [2.62, 2.92, 3.22]) mesh(new THREE.SphereGeometry(0.03, 10, 8), Mt.button, VG, [0.03, y, zf(y) - 0.005]);
 }
@@ -234,38 +227,55 @@ for (const sx of [-0.22, 0.22]){
 
 /* ================= 手臂与手 ================= */
 const tube = (pts, r) => mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V.v3(...p))), 28, r, 14, false), Mt.coat);
-const leftArm = [[-0.55, 3.86, 0], [-0.7, 3.42, -0.02], [-0.78, 3.04, -0.12], [-0.64, 2.84, -0.52]];
-const rightArm = [[0.55, 3.86, 0], [0.84, 3.5, -0.12], [1.1, 3.26, -0.3], [1.6, 3.5, -0.62]];
+// 手臂从身体里面起笔、经过肩头再往外：管子的开口藏在躯干里，不会在背后露出一个圆头
+const leftArm = [[-0.3, 3.97, 0.03], [-0.57, 3.88, 0.03], [-0.69, 3.5, 0.02], [-0.77, 3.08, -0.1], [-0.64, 2.84, -0.52]];
+const rightArm = [[0.3, 3.97, 0.03], [0.57, 3.88, 0.03], [0.86, 3.52, -0.1], [1.1, 3.26, -0.3], [1.6, 3.5, -0.62]];
 tube(leftArm, 0.13); tube(rightArm, 0.125);
 for (const arm of [leftArm, rightArm]){ const w = arm[arm.length - 1], p = arm[arm.length - 2];
   const cuff = mesh(new THREE.TorusGeometry(0.115, 0.028, 8, 20), Mt.shirt, VG, w);
   cuff.lookAt(VG.localToWorld(V.v3(...w).add(V.v3(w[0] - p[0], w[1] - p[1], w[2] - p[2])))); }
-function hand(wrist, fwd, up0, curl, thumbSide){
+/* 手：真人比例（人物 1 单位约 37 厘米，手长约 0.5 即 19 厘米）——手腕、手掌、四指各两节、拇指两节；肤色与脸一致。
+   手的局部坐标：-z 指向指尖，+y 是手背，thumbSide 表示拇指在 ±x 哪一侧 */
+const handM = new THREE.MeshPhongMaterial({ color: 0xc49a74, specular: 0x1e1610, shininess: 14 });
+function hand(wrist, fwd, up0, curl, thumbSide, thumbCurl = 0.4){
   const f = V.v3(...fwd).normalize(), up = V.v3(...up0).addScaledVector(f, -V.v3(...up0).dot(f)).normalize();
   const back = f.clone().negate(), right = new THREE.Vector3().crossVectors(up, back);
   const g = new THREE.Group(); g.position.set(...wrist);
   g.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, back)); VG.add(g);
-  mesh(new THREE.SphereGeometry(1, 14, 10), Mt.skin, g, [0, 0, -0.07], null, [0.05, 0.022, 0.065]);          // 手掌
-  for (let k=0;k<4;k++){                                                                                  // 四指
-    const x = (k - 1.5)*0.022, fg = new THREE.Group(); fg.position.set(x, 0, -0.125); fg.rotation.x = -curl*(0.9 + k*0.05); g.add(fg);
-    mesh(new THREE.CapsuleGeometry(0.0105, 0.05 - Math.abs(k - 1.5)*0.006, 4, 8), Mt.skin, fg, [0, 0, -0.03], [Math.PI/2, 0, 0]);
-  }
-  const th = new THREE.Group(); th.position.set(thumbSide*0.045, 0.004, -0.06); th.rotation.set(-curl*0.5, thumbSide*0.7, 0); g.add(th);
-  mesh(new THREE.CapsuleGeometry(0.012, 0.045, 4, 8), Mt.skin, th, [0, 0, -0.03], [Math.PI/2, 0, 0]);
-  return g;
+  mesh(new THREE.SphereGeometry(1, 16, 12), handM, g, [0, 0, -0.04], null, [0.07, 0.05, 0.07]);              // 手腕
+  mesh(new THREE.SphereGeometry(1, 20, 14), handM, g, [0, 0, -0.16], null, [0.105, 0.042, 0.13]);            // 手掌
+  [[0.1, 0.085, 0.023, 0], [0.115, 0.095, 0.024, 0.008], [0.108, 0.09, 0.023, 0], [0.085, 0.07, 0.02, -0.012]].forEach(([l1, l2, r, dz], k) => {   // 食指 → 小指
+    const k1 = new THREE.Group(); k1.position.set(thumbSide*(0.075 - k*0.05), 0, -0.275 + dz); k1.rotation.x = -curl*(0.85 + 0.1*k); g.add(k1);
+    mesh(new THREE.CapsuleGeometry(r, l1, 4, 10), handM, k1, [0, 0, -l1/2], [Math.PI/2, 0, 0]);
+    const k2 = new THREE.Group(); k2.position.set(0, 0, -l1); k2.rotation.x = -curl*1.1; k1.add(k2);
+    mesh(new THREE.CapsuleGeometry(r*0.92, l2, 4, 10), handM, k2, [0, 0, -l2/2], [Math.PI/2, 0, 0]);
+  });
+  const t1 = new THREE.Group(); t1.position.set(thumbSide*0.1, -0.015, -0.1); t1.rotation.set(-thumbCurl, thumbSide*0.75, 0); g.add(t1);
+  mesh(new THREE.CapsuleGeometry(0.028, 0.085, 4, 10), handM, t1, [0, 0, -0.0425], [Math.PI/2, 0, 0]);
+  const t2 = new THREE.Group(); t2.position.set(0, 0, -0.085); t2.rotation.x = -thumbCurl*0.8; t1.add(t2);
+  mesh(new THREE.CapsuleGeometry(0.025, 0.07, 4, 10), handM, t2, [0, 0, -0.035], [Math.PI/2, 0, 0]);
+  return { g, f, up };
 }
-hand([-0.64, 2.84, -0.52], [0.25, -0.3, -1], [0, 1, 0], 0.5, 1);            // 左手：托着调色板
-hand([1.6, 3.5, -0.62], [0.85, 0.45, -0.45], [0, 1, 0.3], 1.25, -1);       // 右手：握笔
-// 调色板（拇指穿过的木板）与颜料
-mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.03, 32), Mt.wood, VG, [-0.66, 2.79, -0.78], [0.12, 0.2, 0], [1, 1, 0.72]);
-['#f4d34a','#2c5ea3','#fbeeb0','#e8b830','#7ea6d4','#c0392b','#3e4f2e','#ffffff'].forEach((h, i) => { const a = 0.4 + i*0.55;
-  mesh(new THREE.SphereGeometry(0.045, 8, 6), new THREE.MeshLambertMaterial({ color: h }), VG, [-0.66 + Math.cos(a)*0.28, 2.82, -0.78 + Math.sin(a)*0.18], null, [1, 0.45, 1]); });
-// 画笔：从右手伸向画布
+// 右手：手背朝上，手指半握，捏着画笔伸向画布
+const RH = hand([1.6, 3.5, -0.62], [0.85, 0.45, -0.45], [0, 1, 0.3], 0.75, -1, 0.5);
+// 画笔：从握笔处往前约 0.64 到画布（笔尖差一点点碰到画面），后面露出一截笔杆
 {
-  const from = V.v3(1.66, 3.53, -0.68), dir = V.v3(0.98, 0.5, -0.42).normalize(), L = 0.62;
-  const b = mesh(new THREE.CylinderGeometry(0.013, 0.008, L, 8), new THREE.MeshLambertMaterial({ color: 0x7a5232 }), VG, from.clone().addScaledVector(dir, L*0.35).toArray());
+  const dir = V.v3(0.98, 0.5, -0.42).normalize(), grip = V.v3(1.6, 3.5, -0.62).addScaledVector(RH.f, 0.3).addScaledVector(RH.up, -0.06);
+  const L = 0.82, c0 = grip.clone().addScaledVector(dir, -0.2 + L/2);
+  const b = mesh(new THREE.CylinderGeometry(0.01, 0.017, L, 10), new THREE.MeshLambertMaterial({ color: 0x7a5232 }), VG, c0.toArray());
   b.quaternion.setFromUnitVectors(V.v3(0, 1, 0), dir);
-  const tip = mesh(new THREE.ConeGeometry(0.018, 0.08, 8), new THREE.MeshLambertMaterial({ color: 0xe8c547 }), VG, from.clone().addScaledVector(dir, L*0.35 + L/2 + 0.03).toArray());
-  tip.quaternion.setFromUnitVectors(V.v3(0, 1, 0), dir);
+  const fe = mesh(new THREE.CylinderGeometry(0.012, 0.011, 0.06, 10), new THREE.MeshPhongMaterial({ color: 0xa8a8a0, specular: 0x666666, shininess: 60 }), VG,
+    grip.clone().addScaledVector(dir, 0.62 + 0.03).toArray());
+  fe.quaternion.setFromUnitVectors(V.v3(0, 1, 0), dir);                                                       // 金属箍
+  const tip = mesh(new THREE.ConeGeometry(0.013, 0.07, 10), new THREE.MeshLambertMaterial({ color: 0xe8c547 }), VG, grip.clone().addScaledVector(dir, 0.62 + 0.06 + 0.035).toArray());
+  tip.quaternion.setFromUnitVectors(V.v3(0, 1, 0), dir.clone().negate());                                   // 沾着黄颜料的笔头
+}
+// 左手：手心朝上托着调色板，拇指从上面扣住
+const LH = hand([-0.64, 2.84, -0.52], [0.4, -0.15, -1], [0, -1, 0], 0.35, 1, 0.6);
+{
+  const pc = V.v3(-0.64, 2.84, -0.52).addScaledVector(LH.f, 0.36).add(V.v3(0, 0.07, 0));
+  mesh(new THREE.CylinderGeometry(0.44, 0.44, 0.03, 36), Mt.wood, VG, pc.toArray(), [0.1, 0.3, 0], [1, 1, 0.72]);
+  ['#f4d34a','#2c5ea3','#fbeeb0','#e8b830','#7ea6d4','#c0392b','#3e4f2e','#ffffff'].forEach((h, i) => { const a = 0.9 + i*0.6;
+    mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshLambertMaterial({ color: h }), VG, [pc.x + Math.cos(a)*0.3, pc.y + 0.03, pc.z + Math.sin(a)*0.2], null, [1, 0.45, 1]); });
 }
 })();
