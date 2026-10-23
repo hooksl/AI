@@ -313,7 +313,7 @@ V.activeShot = t => { let a = null; for (const s of V.shots) if (t >= s.start &&
 V.TRANS = { 20:['ripple',1.4], 34:['swirl',1.1], 46:['zoom',0.9], 54:['paintwipe',1.0], 62:['dissolve',1.2],
             71:['radial',1.1], 83:['leak',1.2], 91:['whip',0.7], 114:['ink',1.3], 121:['defocus',1.4] };
 const TR_TYPES = ['ripple','swirl','zoom','paintwipe','dissolve','radial','leak','whip','ink','defocus'];
-const rtOpts = { depthBuffer: true };
+const rtOpts = { depthBuffer: true, samples: 4 };    // 4× 多重采样，与直接上屏的抗锯齿一致
 let rtA = null, rtB = null, trScene = null, trCam = null, trMat = null;
 function initTransition(){
   const w = Math.round(V.W*V.PR), h = Math.round(V.H*V.PR);
@@ -381,11 +381,13 @@ function initTransition(){
           A = texture2D(uA, uv); B = texture2D(uB, uv);
           float rim = smoothstep(0.12, 0.0, abs(n - (p*1.25 - 0.1)));
           gl_FragColor = mix(A, B, m)*(1.0 - 0.75*rim) + vec4(0.04, 0.08, 0.2, 0.0)*rim; return;
-        } else {                    // defocus 虚焦叠化
+        } else if (uType == 9){     // defocus 虚焦叠化
           float b = bell*0.012;
           vec4 a1 = blurA(uv, vec2(b, 0.0)), a2 = blurA(uv, vec2(0.0, b*uAspect));
           vec4 b1 = blurB(uv, vec2(b, 0.0)), b2 = blurB(uv, vec2(0.0, b*uAspect));
           A = (a1 + a2)*0.5; B = (b1 + b2)*0.5; m = smoothstep(0.2, 0.8, p);
+        } else {                    // 非转场：原样输出（所有帧走同一条管线，进出转场时画质不跳变）
+          gl_FragColor = texture2D(uA, uv); return;
         }
         gl_FragColor = mix(A, B, m);
       }`,
@@ -408,16 +410,29 @@ function renderShot(act, t, target){
   V.renderer.setRenderTarget(target);
   V.renderer.render(V.scene, V.camera);
 }
+/* 调试探针：只跑镜头 update 得到相机位姿，不渲染（用来分析运镜是否顿挫） */
+window.probeCam = function(t){
+  buildAll();
+  const act = V.activeShot(t);
+  for (const h of V.hooks.pre) h(t, act);
+  if (act && !act.broken){ try { act.update(t, t - act.start, act.ctx); } catch(e){} }
+  const c = V.camera, q = c.quaternion;
+  return [act ? act.id : '', c.position.x, c.position.y, c.position.z, q.x, q.y, q.z, q.w, c.fov];
+};
 V.activeTransition = t => { for (const c in V.TRANS){ const [ty, d] = V.TRANS[c]; if (Math.abs(t - c) < d/2) return { c: +c, ty, d }; } return null; };
 window.render = function(t){
   buildAll();
   const tr = V.activeTransition(t);
   let act;
+  if (!rtA) initTransition();
   if (!tr){
     act = V.activeShot(t);
-    renderShot(act, t, null);
+    renderShot(act, t, rtA);
+    trMat.uniforms.uA.value = rtA.texture; trMat.uniforms.uB.value = rtA.texture;
+    trMat.uniforms.uP.value = 0; trMat.uniforms.uType.value = -1;
+    V.renderer.setRenderTarget(null);
+    V.renderer.render(trScene, trCam);
   } else {
-    if (!rtA) initTransition();
     const a = V.activeShot(tr.c - 1e-3), b = V.activeShot(tr.c);
     renderShot(a, t, rtA);
     renderShot(b, t, rtB);

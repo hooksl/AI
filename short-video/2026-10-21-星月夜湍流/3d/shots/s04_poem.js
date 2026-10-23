@@ -11,7 +11,7 @@ const PW = 28, PH = 19.6, CW = 1600, CH = 1120;           // 纸张尺寸（世�
 const LINES = [['Big whorls have little whorls', 38.0, 1.3], ['That feed on their velocity,', 39.6, 1.3],
                ['And little whorls have lesser whorls', 42.0, 1.45], ['And so on to viscosity.', 43.6, 1.0]];   // [诗句, 起笔时刻, 书写时长]
 const FEATHER = 90;                                        // 笔迹前沿的羽化宽度（px）
-const DIVE = 44.75;                                        // 镜头开始加速越过纸页的时刻
+const DIVE = 44.05;                                        // 镜头开始加速越过纸页的时刻
 const POEM_Y0 = 548, POEM_DY = 104, POEM_FONT = `italic 500 82px ${V.FONT.GARA}`;
 const INK = '#2a2218';
 const T0 = 34;
@@ -206,7 +206,7 @@ V.shot({ id: 's04', start: 34, end: 46, origin: [8000, 0, 0],
     s.paper.add(s.spark.mesh);
 
     /* ===== 镜头路径（按弧长匀速取点，速度曲线另算） ===== */
-    const endPos = C0.clone().addScaledVector(VIEW.clone().add(N0).normalize(), 26);   // 斜着冲向漏斗中心（涡轴已上仰）
+    const endPos = C0.clone().addScaledVector(VIEW.clone().add(N0).normalize(), 58);   // 终点离涡心更远：俯冲距离缩短，速度与转向都更平缓   // 斜着冲向漏斗中心（涡轴已上仰）
     const slowPts = [V.v3(-11, 4.5, 52), V.v3(-2, 3, 49.5), V.v3(6.5, 1, 46), V.v3(13.5, -0.5, 42.5)];
     s.curve = new THREE.CatmullRomCurve3([...slowPts, V.v3(22, 0, 24), V.v3(31, 1, -14), V.v3(37, 3, -62), endPos], false, 'centripetal');
     s.curveLen = s.curve.getLength();
@@ -222,7 +222,7 @@ V.shot({ id: 's04', start: 34, end: 46, origin: [8000, 0, 0],
     // 冲刺段：附加速度在前 60% 时间内按 smoothstep 升满、之后保持，让 45.6s 转场前已明显飞近涡心
     const Dur = 46 - DIVE, x = P(t, DIVE, 46), XR = 0.6;
     const gx = x < XR ? XR*((x/XR)**3 - (x/XR)**4/2) : XR*0.5 + (x - XR), G1 = XR*0.5 + (1 - XR);
-    const A = (s.curveLen - s.v0*12)/(Dur*G1);
+    const A = (s.curveLen*0.62 - s.v0*12)/(Dur*G1);       // 46s 时只飞完冲刺段的约六成：剩下的交给推进转场，避免过猛的甩镜
     const dist = s.v0*(t - T0) + A*Dur*gx;
     const cam = s.curve.getPointAt(clamp(dist/s.curveLen, 0, 1));
     cam.y += 0.25*Math.sin(t*0.8);
@@ -232,7 +232,7 @@ V.shot({ id: 's04', start: 34, end: 46, origin: [8000, 0, 0],
     look.y -= lerp(0.084, 0.129, E(t, 37, 43)); look.normalize();
     let tgt = cam.clone().addScaledVector(look, 40);
     const dive = E(t, DIVE + 0.05, 45.75);
-    tgt.lerp(s.C0.clone().addScaledVector(s.N0, -8), dive);
+    tgt.lerp(s.C0.clone().addScaledVector(s.N0, -34), dive);
     const fov = lerp(lerp(47, 45, E(t, 34, 44)), 62, E(t, DIVE, 46));
     ctx.cam(cam, tgt, fov, 0.035*Math.sin(t*0.42) + 0.06*dive*Math.sin(t*2.1));
 

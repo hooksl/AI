@@ -5,7 +5,7 @@ V.shot({ id: 's12', start: 121, end: 136, useWorld: true,
   build(ctx){
     const G = V.world.features[0], s = ctx.state;
     s.G = G;
-    s.path = V.spline([
+    const curve = new THREE.CatmullRomCurve3([
       G.C.clone().addScaledVector(G.n, -80).add(V.v3(18, -6, 0)),
       G.C.clone().addScaledVector(G.n, -150),
       V.v3(-4, 30, 6),
@@ -13,7 +13,8 @@ V.shot({ id: 's12', start: 121, end: 136, useWorld: true,
       V.P0.clone(),
       V.v3(0, 14.2, 79),
       V.v3(3.0, 11.6, 88.5),           // 退到梵高身后：他的背影居中，窗外是星空
-    ]);
+    ], false, 'centripetal');
+    s.path = u => curve.getPointAt(V.clamp(u, 0, 1));       // 按弧长取点：速度只由 u(t) 决定，没有折角处的速度突变
     // 片尾 135–136s 渐暗
     V.overlayHooks.push((c, t) => { const k = E(t, 135.0, 136); if (k<=0) return; c.fillStyle = `rgba(4,5,14,${k})`; c.fillRect(0,0,1920,1080); });
   },

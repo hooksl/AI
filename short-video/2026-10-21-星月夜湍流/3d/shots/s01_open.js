@@ -18,22 +18,21 @@ V.shot({ id: 's01a', start: 0, end: 15.4, useWorld: true,
       [11.0, [-2,   17,  -56]],             // 教堂尖塔从右侧擦过
       [12.6, g(70)],
       [14.0, g(38)],
-      [14.9, g(22)],
+      [14.9, g(17)],
+      [15.4, g(-5)],                       // 穿过漩涡中心（与前段同一条速度连续曲线）
     ];
   },
   update(t, lt, ctx){
     const s = ctx.state, G = s.G;
     V.world.set({ reveal: lerp(0.08, 1, easeOut(P(t, 0, 6.0))) });
-    let pos = V.v3(...V.keysSmooth(Math.min(t, 14.9), s.K)), tgt, fov = 52;
-    // 前进方向（速度方向），视线略抬高，让天空与水中倒影同在画面里
-    const ahead = V.v3(...V.keysSmooth(Math.min(t + 0.35, 14.9), s.K)).sub(V.v3(...V.keysSmooth(Math.max(0, Math.min(t, 14.9) - 0.35), s.K))).normalize();
+    const pos = V.v3(...V.keysSmooth(t, s.K)), fov0 = 52;
+    // 前进方向（速度方向，前后各取 0.6s 平滑），视线略抬高，让天空与水中倒影同在画面里
+    const ahead = V.v3(...V.keysSmooth(Math.min(t + 0.6, 15.4), s.K)).sub(V.v3(...V.keysSmooth(Math.max(0, t - 0.6), s.K))).normalize();
     const fwdT = pos.clone().addScaledVector(ahead, 80).add(V.v3(0, V.lerp(16, 30, E(t, 6, 10)), -30));
-    tgt = fwdT.lerp(G.C, E(t, 9.8, 13.2));
-    if (t > 14.9){                                       // 冲进漩涡中心
-      const k = V.easeIn(P(t, 14.9, 15.4));
-      pos = G.C.clone().addScaledVector(G.n, lerp(-22, 8, k));
-      tgt = G.C.clone().addScaledVector(G.n, 40);
-    }
+    let tgt = fwdT.lerp(G.C, E(t, 8.6, 13.0));
+    // 末段相机在漩涡轴线上：看向"前方沿轴 60"与看向涡心方向一致，平滑过渡，穿过涡心时视线不翻转
+    tgt.lerp(pos.clone().addScaledVector(G.n, 60), E(t, 13.4, 14.6));
+    let fov;
     fov = lerp(lerp(56, 50, E(t, 8, 11)), 64, E(t, 12.5, 15.3));
     const roll = 0.07*Math.sin(t*0.7)*(1 - E(t, 8, 10)) + 0.04*Math.sin(t*0.45)*E(t, 8, 12);
     V.setCam(pos, tgt, fov, roll);

@@ -315,7 +315,7 @@ V.shot({ id: 's10', start: 91, end: 114, origin: [32000, 0, 0],
     /* 108.6–114：绕颜料团法线的缓慢环绕（局部坐标，纯 t 函数） */
     s.orbit = t => {
       const kp = clamp((t - 108.6)/5.4, 0, 1);
-      const ang = lerp(0, -0.75, kp), rr = lerp(6.2, 7.2, kp);
+      const ang = lerp(0, -1.5, kp), rr = lerp(6.2, 7.2, kp);
       const rel = V.v3(-1.5*Math.cos(ang) + rr*Math.sin(ang) + 0.3*Math.sin(t*0.7), -1.5*Math.sin(ang) - rr*Math.cos(ang) + 0.25*Math.sin(t*0.9), lerp(15, 10.0, smooth(kp)));
       return [s.Pp.clone().add(rel), s.Pp.clone().add(V.v3(lerp(0.5, 3.0, kp), lerp(-0.5, 0.6, kp), 0))];
     };

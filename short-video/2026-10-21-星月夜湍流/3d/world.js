@@ -173,7 +173,7 @@ for (let i=0;i<78;i++){
   roof.position.set(0, h/2 + h*0.35, 0); roof.rotation.y = Math.PI/4; roof.scale.set(w/Math.max(w,d), 1, d/Math.max(w,d));
   body.add(roof);
   if (R() < 0.75){
-    const win = new THREE.Mesh(new THREE.PlaneGeometry(w*0.22, h*0.32), winMat.clone());
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(w*0.22, h*0.32), winMat.clone()); win.userData.glow = true;
     win.position.set((R()-0.5)*w*0.4, -h*0.05, d/2+0.05); body.add(win); winList.push({m: win, ph: R()*6.28});
   }
   village.add(body);
