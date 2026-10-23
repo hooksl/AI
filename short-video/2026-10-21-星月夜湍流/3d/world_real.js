@@ -2,7 +2,7 @@
    1. 光照：天光（半球光）+ 月光（平行光）+ 烛光（点光源）+ 窗口冷光（聚光灯）
    2. 世界里的平涂材质换成受光材质（Lambert），配程序化的笔触纹理：灰泥墙、瓦片屋顶、陶土地砖、木纹、田野
    3. 房屋加烟囱与窗光；病房加画架，画布上是正在画的《星月夜》
-   4. 梵高重建：平滑建模的身体、手臂、手，手绘风格面部贴图，橙红头发与胡须体块
+   4. 梵高人像见 vangogh.js
    全部只在加载时构建一次，画面仍只由 t 决定。 */
 (function(){
 const W = V.world, ROOM = W.room, R = V.rng(9090);
@@ -136,111 +136,6 @@ W.traverse(o => {
   const back = new THREE.Mesh(new THREE.BoxGeometry(3.36, 2.7, 0.08), wood); back.position.set(0, 4.55, 0.45); back.rotation.x = -0.1; E_.add(back);
 }
 
-/* ---------- 梵高重建 ---------- */
-const VG = W.vangogh;
-VG.children.forEach(c => { c.visible = false; });                   // 隐藏旧的笔触人像
-const skinTex = canvasTex(1024, 512, (c, w, h) => {
-  // 等距柱状投影：u=0.75 为面部正前方（-z），v=0.5 为赤道
-  c.fillStyle = '#d49a6a'; c.fillRect(0, 0, w, h);
-  dabs(c, w, h, 1800, ['#e0aa78','#c88a5a','#d8a070','#b87a4e','#e8b88a'], 26, 7, 0.4, 2.5);
-  const fx = 0.75*w;
-  const blob = (x, y, rx, ry, col, a) => { c.globalAlpha = a; c.fillStyle = col; c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI*2); c.fill(); c.globalAlpha = 1; };
-  blob(fx - 92, 262, 46, 34, '#d07a5a', 0.45); blob(fx + 92, 262, 46, 34, '#d07a5a', 0.45);              // 脸颊红晕
-  blob(fx, 222, 120, 26, '#8a9a6a', 0.15);                                                             // 眉骨下的绿灰阴影（梵高自画像的配色）
-  for (const sx of [-1, 1]){
-    const ex = fx + sx*56, ey = 226;
-    blob(ex, ey + 4, 30, 12, '#9a7a5e', 0.35);                                                         // 眼窝
-    blob(ex, ey, 22, 10, '#e8e0cc', 0.95);                                                             // 眼白
-    blob(ex + sx*2, ey, 11, 10, '#3e6e62', 1); blob(ex + sx*2, ey, 5, 5, '#141a18', 1);               // 蓝绿色虹膜、瞳孔
-    blob(ex + sx*2 + 4, ey - 4, 3, 3, '#ffffff', 0.9);                                                 // 高光
-    c.strokeStyle = '#4a2a1a'; c.lineWidth = 4; c.beginPath(); c.ellipse(ex, ey, 24, 11, 0, Math.PI*1.05, Math.PI*1.95); c.stroke();   // 上眼睑
-    c.strokeStyle = '#b8541f'; c.lineWidth = 9; c.lineCap = 'round';                                   // 橙红眉毛，眉头微蹙
-    c.beginPath(); c.moveTo(ex - sx*34, ey - 30); c.quadraticCurveTo(ex, ey - 42, ex + sx*30, ey - 24); c.stroke();
-  }
-  c.strokeStyle = '#a86a48'; c.lineWidth = 6; c.beginPath(); c.moveTo(fx - 6, 232); c.lineTo(fx - 12, 282); c.lineTo(fx + 8, 290); c.stroke();   // 鼻梁与鼻翼阴影
-  c.strokeStyle = '#7a3a2a'; c.lineWidth = 5; c.beginPath(); c.moveTo(fx - 30, 318); c.quadraticCurveTo(fx, 326, fx + 30, 318); c.stroke();      // 抿着的嘴
-  c.strokeStyle = 'rgba(140,90,60,.6)'; c.lineWidth = 4;                                                // 额头的皱纹
-  for (let k=0;k<3;k++){ c.beginPath(); c.moveTo(fx - 70, 170 + k*12); c.quadraticCurveTo(fx, 162 + k*12, fx + 70, 170 + k*12); c.stroke(); }
-});
-const hairTex = canvasTex(512, 256, (c, w, h) => { c.fillStyle = '#b8521f'; c.fillRect(0, 0, w, h);
-  dabs(c, w, h, 1400, ['#d46a2e','#a8481e','#e07a3a','#8a3a18','#f08a44','#c0592a'], 22, 5, Math.PI/2, 0.9); });
-const coatTex = canvasTex(512, 512, (c, w, h) => { c.fillStyle = '#3a5a9e'; c.fillRect(0, 0, w, h);
-  for (let k=0;k<14;k++){ const x = R()*w; c.fillStyle = 'rgba(20,30,70,.28)'; c.fillRect(x, 0, 6 + R()*16, h); }   // 竖向衣褶
-  dabs(c, w, h, 1600, ['#2f4a88','#4a6cb0','#5a7cc0','#26407a','#6a8ac8','#3e5ea0'], 40, 8, Math.PI/2, 0.5); });
-const trouserTex = canvasTex(256, 256, (c, w, h) => { c.fillStyle = '#2e3448'; c.fillRect(0, 0, w, h);
-  dabs(c, w, h, 500, ['#3a4258','#262c3e','#424a62'], 30, 6, Math.PI/2, 0.4); });
-const M = {
-  skin: new THREE.MeshLambertMaterial({ color: 0xffffff, map: skinTex }),
-  skinPlain: new THREE.MeshLambertMaterial({ color: 0xd49a6a }),
-  hair: new THREE.MeshLambertMaterial({ color: 0xffffff, map: hairTex }),
-  coat: new THREE.MeshLambertMaterial({ color: 0xffffff, map: coatTex }),
-  trousers: new THREE.MeshLambertMaterial({ color: 0xffffff, map: trouserTex }),
-  shoe: new THREE.MeshLambertMaterial({ color: 0x2a1c14 }),
-  shirt: new THREE.MeshLambertMaterial({ color: 0xd8d4c4 }),
-  wood: new THREE.MeshLambertMaterial({ color: 0xc09a70, map: TEX.wood }),
-};
-const add = (geo, mat, pos, rot, scl) => { const m = new THREE.Mesh(geo, mat); if (pos) m.position.set(...pos); if (rot) m.rotation.set(...rot); if (scl) m.scale.set(...scl); VG.add(m); return m; };
-// 腿与鞋
-for (const sx of [-0.31, 0.31]){
-  add(new THREE.CylinderGeometry(0.27, 0.24, 2.3, 16), M.trousers, [sx, 1.3, 0]);
-  add(new THREE.SphereGeometry(1, 16, 10), M.shoe, [sx, 0.12, -0.12], null, [0.2, 0.13, 0.36]);
-}
-// 罩衫：车削出肩—胸—腰—下摆的轮廓，前后略扁
-{
-  const prof = [[0.0,2.05],[0.98,2.05],[1.02,2.25],[0.97,2.7],[0.9,3.2],[0.88,3.6],[0.92,3.85],[0.82,4.02],[0.5,4.12],[0.24,4.16]].map(([r,y]) => new THREE.Vector2(r, y));
-  const g = new THREE.LatheGeometry(prof, 40);
-  const pa = g.attributes.position;
-  for (let i=0;i<pa.count;i++){ const x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i), a = Math.atan2(z, x);
-    const fold = 1 + 0.035*Math.sin(a*9 + y*2) * V.clamp((3.4 - y)/1.3, 0, 1);          // 下摆的布褶
-    pa.setXYZ(i, x*fold, y, z*0.7*fold); }
-  g.computeVertexNormals();
-  add(g, M.coat);
-  add(new THREE.TorusGeometry(0.24, 0.06, 8, 24), M.shirt, [0, 4.14, -0.02], [Math.PI/2 + 0.15, 0, 0]);   // 衬衫领口
-}
-// 手臂：沿曲线的管子；手：椭球
-const arm = (pts, r) => add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => V.v3(...p))), 24, r, 12, false), M.coat);
-arm([[-0.82, 3.92, 0], [-1.0, 3.45, -0.1], [-1.04, 3.05, -0.3], [-0.86, 2.95, -0.8]], 0.19);       // 左臂：托调色板
-arm([[0.82, 3.92, 0], [1.12, 3.5, -0.15], [1.38, 3.28, -0.42], [1.68, 3.5, -0.78]], 0.18);         // 右臂：伸向画布
-add(new THREE.SphereGeometry(1, 14, 10), M.skinPlain, [-0.82, 2.93, -0.98], [0.2, 0, 0], [0.13, 0.09, 0.16]);
-add(new THREE.SphereGeometry(1, 14, 10), M.skinPlain, [1.74, 3.53, -0.86], [0, 0.5, 0.3], [0.12, 0.1, 0.15]);
-// 调色板与画笔
-add(new THREE.CylinderGeometry(0.5, 0.5, 0.04, 28), M.wood, [-0.85, 2.86, -1.12], [0, 0, 0], [1, 1, 0.75]);
-['#f4d34a','#2c5ea3','#fbeeb0','#e8b830','#7ea6d4','#c0392b','#3e4f2e'].forEach((h, i) => { const a = 0.5 + i*0.55;
-  add(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshLambertMaterial({ color: h }), [-0.85 + Math.cos(a)*0.32, 2.9, -1.12 + Math.sin(a)*0.22], null, [1, 0.5, 1]); });
-add(new THREE.CylinderGeometry(0.022, 0.016, 1.0, 6), new THREE.MeshLambertMaterial({ color: 0x6a4a2a }), [1.98, 3.66, -1.04], [-1.0, 0, -0.9]);
-// 脖子、头（下颌收窄）、鼻子、耳朵
-add(new THREE.CylinderGeometry(0.15, 0.17, 0.4, 14), M.skinPlain, [0, 4.3, -0.03]);
-{
-  const g = new THREE.SphereGeometry(1, 48, 32), pa = g.attributes.position;
-  for (let i=0;i<pa.count;i++){ let x = pa.getX(i), y = pa.getY(i), z = pa.getZ(i);
-    if (y < 0){ x *= 1 - 0.22*(-y); }                                   // 下颌收窄
-    if (z > 0.3) z *= 0.92;                                             // 后脑略平
-    pa.setXYZ(i, x, y, z); }
-  g.computeVertexNormals();
-  add(g, M.skin, [0, 4.8, -0.04], null, [0.33, 0.42, 0.37]);
-  add(new THREE.SphereGeometry(1, 16, 12), M.skinPlain, [0, 4.74, -0.42], [0.25, 0, 0], [0.065, 0.12, 0.075]);   // 鼻子
-  for (const sx of [-1, 1]) add(new THREE.SphereGeometry(1, 12, 10), M.skinPlain, [sx*0.33, 4.8, 0.0], null, [0.05, 0.1, 0.08]);   // 耳朵
-  // 头发：头顶与后脑的帽状体
-  add(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI*2, 0, 1.25), M.hair, [0, 4.82, -0.02], [-0.2, 0, 0], [0.355, 0.44, 0.395]);
-  add(new THREE.SphereGeometry(1, 32, 16, 0, Math.PI, 0.9, 1.1), M.hair, [0, 4.78, 0.0], null, [0.35, 0.43, 0.39]);      // phi 0..π 即后脑（+z）一侧
-  // 胡须：下巴与两腮的一层体块（只覆盖面部前方和两侧的下半部）
-  {                                                                    // 跟头部一样收窄下颌，只从嘴下方开始，贴着脸
-    const bg = new THREE.SphereGeometry(1, 36, 18, Math.PI*0.9, Math.PI*1.2, 1.98, 0.9), bp = bg.attributes.position;
-    for (let i=0;i<bp.count;i++){ const x = bp.getX(i), y = bp.getY(i); if (y < 0) bp.setX(i, x*(1 - 0.22*(-y))); }
-    bg.computeVertexNormals();
-    add(bg, M.hair, [0, 4.8, -0.04], null, [0.345, 0.43, 0.385]);
-  }
-  add(new THREE.CapsuleGeometry(0.028, 0.16, 4, 8), M.hair, [0, 4.665, -0.415], [0, 0, Math.PI/2]);   // 唇上的髭
-}
-// 笔触描边层：头发、胡须、罩衫边缘一圈细笔触，保留油画质感
-{
-  const items = [], vgw = new THREE.Vector3();
-  const ring = (n, c, r, pal, len, wid, filter) => { for (let i=0;i<n;i++){ const u = R()*Math.PI*2, v = Math.asin(R()*2-1);
-    const nn = [Math.cos(v)*Math.cos(u), Math.sin(v), Math.cos(v)*Math.sin(u)]; if (filter && !filter(nn)) { i--; continue; }
-    items.push([c[0]+r[0]*nn[0], c[1]+r[1]*nn[1], c[2]+r[2]*nn[2], -Math.sin(u), 0.6*(R()-0.5) - 0.5, Math.cos(u), len*(0.7+R()*0.6), wid, V.hex(pick(pal)).map(x => x*0.85)]); } };
-  ring(360, [0, 4.84, -0.02], [0.37, 0.45, 0.41], ['#c0592a','#d46a2e','#e07a3a','#a8481e'], 0.13, 0.035, nn => nn[1] > 0.25 || nn[2] > 0.3);
-  ring(220, [0, 4.58, -0.08], [0.29, 0.28, 0.36], ['#c0592a','#d46a2e','#e8843e','#b04a20'], 0.1, 0.03, nn => nn[1] < -0.35 && nn[2] < 0.2);
-  const st = new V.Strokes(items.length, {renderOrder: 4});
-  items.forEach((p, i) => st.set(i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], 0.9)); st.commit(); VG.add(st.mesh);
-}
+/* 梵高人像在 vangogh.js 里构建（共用这里的纹理工具） */
+V.real = { canvasTex, dabs, TEX, pick };
 })();

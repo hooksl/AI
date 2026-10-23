@@ -406,6 +406,7 @@ function renderShot(act, t, target){
     try { act.update(t, t - act.start, act.ctx); }
     catch(e){ console.error('[update ' + act.id + ' @' + t.toFixed(2) + ']', e); }
   }
+  if (window.__camOverride) window.__camOverride(V.camera, act);     // 调试用：覆盖机位（正式渲染不会设置）
   for (const h of V.hooks.post) h(t, act);
   V.renderer.setRenderTarget(target);
   V.renderer.render(V.scene, V.camera);
@@ -445,10 +446,11 @@ window.render = function(t){
   }
   V.overlay && V.overlay(t, act);
 };
+V.preload = V.preload || [];     // 需要异步加载的资源（如图片解码），setup 会等它们全部完成
 window.setup = function(done){
   const f = V.FONT;
   const fonts = [`700 46px ${f.SANS}`, `900 64px ${f.SANS}`, `700 40px ${f.SERIF}`, `900 40px ${f.SERIF}`, `italic 28px ${f.GARA}`, `28px ${f.GARA}`, `italic 600 46px ${f.GARA}`, `italic 64px ${f.MATH}`];
-  Promise.all(fonts.map(x => document.fonts.load(x, '星月夜 Turbulence ∂∇ρν'))).then(() => {
+  Promise.all([...fonts.map(x => document.fonts.load(x, '星月夜 Turbulence ∂∇ρν')), ...V.preload]).then(() => {
     buildAll();
     for (const s of V.shots) if (s.ctx.refresh) s.ctx.refresh();
     done();
