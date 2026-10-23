@@ -140,7 +140,7 @@ const hAt = (x, z) => {
 for (let i=0;i<tp.count;i++){
   const x = tp.getX(i), z = tp.getZ(i), h = hAt(x,z); tp.setY(i, h);
   const k = V.clamp(h/40, 0, 1);
-  const c = new THREE.Color().setRGB(V.lerp(0.07,0.15,k), V.lerp(0.10,0.22,k), V.lerp(0.24,0.42,k), THREE.SRGBColorSpace);
+  const c = new THREE.Color().setRGB(V.lerp(0.04,0.09,k), V.lerp(0.06,0.13,k), V.lerp(0.15,0.27,k), THREE.SRGBColorSpace);   // 山要比天空深：受光、调色提亮之后也不会和天空混成一片
   tcol.set([c.r,c.g,c.b], i*3);
 }
 terr.setAttribute('color', new THREE.BufferAttribute(tcol,3)); terr.computeVertexNormals();
@@ -149,14 +149,14 @@ W.add(terrain);
 // 近处地面
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 260).rotateX(-Math.PI/2).translate(0,-0.05,60), new THREE.MeshBasicMaterial({color: 0x0d1736, fog: true}));
 W.add(ground);
-// 山上的笔触（沿等高线方向）。只铺在山坡上：笔触总是正对镜头，铺在山脚的平地上时，从低处平视会立成一排灰白的"墙"
+// 山上的笔触（沿等高线方向），从山脚一直铺到山顶；山脚和近处只用深蓝，不然会和天空混在一起，像山底透明
 const hillPts = [];
 for (let i=0; i<60000 && hillPts.length < 7000; i++){
   const far = hillPts.length >= 2600, x = -440 + R()*880, z = far ? -150 - R()*420 : -60 - R()*110, h = hAt(x, z);
-  if (h < (far ? 6 : 9)) continue;                                                    // 近处山坡只铺上半段
+  if (h < (far ? 6 : 2)) continue;
   const dzdx = (hAt(x+1,z) - hAt(x-1,z))/2, k = far ? 1.6 : 1;
   hillPts.push([x, h + 0.4*k, z, 1, dzdx, 0.15*(R()-0.5), (5+R()*5)*k, (far ? 1.6+R()*0.8 : 1.1+R()*0.6)*k,
-    V.hex(pick(far ? ['#1a2c5c','#22386e','#2c4680','#1c3456','#3a5890','#5878a8'] : ['#1c2f63','#2a4480','#25386e','#1e3a5c','#304c88'])), 0.9]);
+    V.hex(pick(far ? ['#1a2c5c','#22386e','#2c4680','#1c3456','#3a5890','#5878a8'] : h < 12 ? ['#13204a','#1a2a58','#1c2f63','#16264f','#22386e'] : ['#1c2f63','#2a4480','#25386e','#1e3a5c','#304c88','#3b5a96'])), 0.9]);
 }
 const hillS = new V.Strokes(hillPts.length, {renderOrder: 2});
 hillPts.forEach((p, i) => hillS.set(i, ...p));
