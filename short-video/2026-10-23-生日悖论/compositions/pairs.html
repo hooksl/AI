@@ -1,0 +1,80 @@
+<template>
+  <style>
+    @font-face { font-family: "Noto Sans SC"; font-weight: 900; src: url("assets/fonts/noto-sc-900.ttf"); }
+    @font-face { font-family: "Noto Sans SC"; font-weight: 500; src: url("assets/fonts/noto-sc-500.ttf"); }
+    #root { position: absolute; inset: 0; font-family: "Noto Sans SC", sans-serif; color: #141414; }
+    #pairs-title { position: absolute; left: 96px; top: 220px; font-weight: 900; font-size: 96px; letter-spacing: -0.04em; }
+    #pairs-svg { position: absolute; left: 90px; top: 360px; width: 900px; height: 900px; overflow: visible; }
+    #pairs-svg line { stroke: #141414; stroke-width: 2.4; stroke-linecap: round; }
+    #pairs-svg circle { fill: #141414; }
+    #pairs-count {
+      position: absolute; left: 96px; right: 96px; top: 1150px; text-align: center;
+      font-family: "Archivo Black", sans-serif; font-size: 170px; line-height: 1; letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums; color: #c8221a; text-shadow: 3px 3px 0 rgba(20,20,20,0.2);
+    }
+    #pairs-count small { font-family: "Noto Sans SC", sans-serif; font-weight: 900; font-size: 96px; color: #141414; margin-left: 8px; }
+  </style>
+  <div id="root" data-composition-id="pairs" data-width="1080" data-height="1920">
+    <div id="pairs-title">23 人能凑出</div>
+    <svg id="pairs-svg" viewBox="0 0 900 900" data-layout-allow-overflow>
+      <g id="pairs-lines"></g>
+      <g id="pairs-dots"></g>
+    </svg>
+    <div id="pairs-count"><span id="pairs-n">0</span><small>对</small></div>
+  </div>
+  <script>
+    (function () {
+      const NS = "http://www.w3.org/2000/svg";
+      const N = 23, cx = 450, cy = 400, r = 360;
+      const pts = [];
+      for (let i = 0; i < N; i++) {
+        const a = -Math.PI / 2 + (i / N) * Math.PI * 2;
+        pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+      }
+      const lines = document.getElementById("pairs-lines");
+      const dots = document.getElementById("pairs-dots");
+      const ls = [];
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        const l = document.createElementNS(NS, "line");
+        l.setAttribute("x1", pts[i][0]); l.setAttribute("y1", pts[i][1]);
+        l.setAttribute("x2", pts[j][0]); l.setAttribute("y2", pts[j][1]);
+        const len = Math.hypot(pts[j][0] - pts[i][0], pts[j][1] - pts[i][1]);
+        l.style.strokeDasharray = len; l.style.strokeDashoffset = len;
+        l.dataset.len = len;
+        lines.appendChild(l); ls.push(l);
+      }
+      // 配音说到“每一对”时，单独描红其中一对
+      const hi = document.createElementNS(NS, "line");
+      hi.setAttribute("x1", pts[0][0]); hi.setAttribute("y1", pts[0][1]);
+      hi.setAttribute("x2", pts[11][0]); hi.setAttribute("y2", pts[11][1]);
+      const hiLen = Math.hypot(pts[11][0] - pts[0][0], pts[11][1] - pts[0][1]);
+      hi.style.stroke = "#c8221a"; hi.style.strokeWidth = 12;
+      hi.style.strokeDasharray = hiLen; hi.style.strokeDashoffset = hiLen;
+      dots.before(hi);
+      const cs = pts.map(([x, y]) => {
+        const c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 22);
+        dots.appendChild(c); return c;
+      });
+
+      const tl = gsap.timeline({ paused: true });
+      tl.fromTo("#pairs-title", { opacity: 0, x: -40 }, { opacity: 1, x: 0, duration: 0.35, ease: "power4.out" }, 0);
+      tl.fromTo(cs, { scale: 0, transformOrigin: "50% 50%" }, { scale: 1, duration: 0.25, ease: "back.out(2.2)", stagger: 0.02, transformOrigin: "50% 50%" }, 0.1);
+      const drawStart = 1.3, drawDur = 3.3;
+      ls.forEach((l, k) => {
+        tl.fromTo(l, { strokeDashoffset: +l.dataset.len }, { strokeDashoffset: 0, duration: 0.3, ease: "power2.out" }, drawStart + (k / ls.length) * (drawDur - 0.3));
+      });
+      tl.fromTo("#pairs-svg line", { opacity: 0.9 }, { opacity: 0.35, duration: 0.6, ease: "power2.inOut" }, drawStart + drawDur);
+      const counter = { v: 0 };
+      const nEl = document.getElementById("pairs-n");
+      tl.fromTo(counter, { v: 0 }, {
+        v: 253, duration: drawDur, ease: "none",
+        onUpdate: () => { nEl.textContent = Math.round(counter.v); },
+      }, drawStart);
+      tl.fromTo("#pairs-count", { scale: 1 }, { scale: 1.12, duration: 0.12, yoyo: true, repeat: 1, ease: "power2.out" }, drawStart + drawDur);
+      tl.fromTo(hi, { strokeDashoffset: hiLen }, { strokeDashoffset: 0, duration: 0.4, ease: "power4.out" }, 4.9);
+      tl.fromTo([cs[0], cs[11]], { fill: "#141414" }, { fill: "#c8221a", duration: 0.1 }, 4.9);
+      window.__timelines["pairs"] = tl;
+    })();
+  </script>
+</template>

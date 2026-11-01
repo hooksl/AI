@@ -1,0 +1,30 @@
+[
+  {
+    "out": "assets/voice/vo-hook.wav",
+    "text": "一个班，二十三个人。有两个人同一天生日的概率，你猜有多大？",
+    "speaker": "Dylan",
+    "instruct": "像在问观众一个有趣的问题，好奇、带一点悬念，语速稍快，自然口语化。",
+    "seed": 7
+  },
+  {
+    "out": "assets/voice/vo-pairs.wav",
+    "text": "二十三个人两两配对，一共能凑出二百五十三对。每一对，都是一次撞生日的机会。",
+    "speaker": "Dylan",
+    "instruct": "娓娓道来地解释，语速适中，“二百五十三对”稍微加重，自然口语化。",
+    "seed": 7
+  },
+  {
+    "out": "assets/voice/vo-result.wav",
+    "text": "所以，至少有一对撞上的概率是——百分之五十点七。超过一半！",
+    "speaker": "Dylan",
+    "instruct": "揭晓答案：说到数字前稍作停顿，再略带惊讶地说出来，自然口语化。",
+    "seed": 7
+  },
+  {
+    "out": "assets/voice/vo-outro.wav",
+    "text": "要是换成七十个人，这个数字是百分之九十九点九。你的直觉错了，这就是生日悖论。",
+    "speaker": "Dylan",
+    "instruct": "语气笃定、带点得意，“九十九点九”每个字都说清楚，最后一句稍放慢收尾，自然口语化。",
+    "seed": 13
+  }
+]

@@ -1,0 +1,6 @@
+vendor/lps_head.js 中的头部网格与贴图来自 Lee Perry-Smith 的头部扫描（Infinite Realities），
+经 three.js 示例（examples/models/gltf/LeePerrySmith，r158）分发。
+授权：Creative Commons Attribution 3.0 Unported（CC BY 3.0）
+https://creativecommons.org/licenses/by/3.0/
+修改：裁掉肩膀、以 base64 内嵌（tools/make_lps_head.py）；运行时在 vangogh.js 里改形、重新上色、睁开眼睛、加头发胡须。
+发布时须署名：见 publish.md 置顶评论。
