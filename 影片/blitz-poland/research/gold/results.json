@@ -1,0 +1,54 @@
+{
+ "query": "gold bar ingot",
+ "type": "image",
+ "results": [
+  {
+   "source": "met",
+   "id": "464088",
+   "title": "Fragment of a Gold Ingot",
+   "creator": "Avar",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/464088",
+   "file": "https://images.metmuseum.org/CRDImages/md/original/dp30473.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/md/web-large/dp30473.jpg",
+   "type": "image",
+   "n": 1
+  },
+  {
+   "source": "met",
+   "id": "46839",
+   "title": "Cup in the shape of gold ingot",
+   "creator": "China",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/46839",
+   "file": "https://images.metmuseum.org/CRDImages/as/original/79_2_1013_S_sf.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/as/web-large/79_2_1013_S_sf.jpg",
+   "type": "image",
+   "n": 2
+  },
+  {
+   "source": "aic",
+   "id": "594",
+   "title": "Ring with a Scarab Bezel",
+   "creator": "Egyptian",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/594",
+   "file": "https://www.artic.edu/iiif/2/d9067d6e-e133-705c-cf53-528c035a5201/full/2195,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/d9067d6e-e133-705c-cf53-528c035a5201/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 3
+  },
+  {
+   "source": "aic",
+   "id": "845",
+   "title": "Fragment of a Necklace",
+   "creator": "Roman; probably Egypt",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/845",
+   "file": "https://www.artic.edu/iiif/2/051007c3-2ef5-64bf-f7dc-71b123d75e4d/full/3000,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/051007c3-2ef5-64bf-f7dc-71b123d75e4d/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 4
+  }
+ ]
+}

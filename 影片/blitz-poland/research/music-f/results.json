@@ -1,0 +1,86 @@
+{
+ "query": "Chopin nocturne",
+ "type": "sound",
+ "results": [
+  {
+   "source": "wikimedia",
+   "id": "155171743",
+   "title": "Chopin - Nocturne No. 21 in C minor, B. 108 (Diana Hughes).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Nocturne_No._21_in_C_minor,_B._108_(Diana_Hughes).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/0/0b/Chopin_-_Nocturne_No._21_in_C_minor%2C_B._108_%28Diana_Hughes%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 1
+  },
+  {
+   "source": "wikimedia",
+   "id": "92651553",
+   "title": "Chopin, Nocturne op 32 no 1.ogg",
+   "creator": "Constantin Stephan, piano",
+   "licence": "cc-by-sa",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin,_Nocturne_op_32_no_1.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/a/a7/Chopin%2C_Nocturne_op_32_no_1.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "licence_name": "CC BY-SA 4.0",
+   "n": 2
+  },
+  {
+   "source": "wikimedia",
+   "id": "6096694",
+   "title": "Chopin Nocturne Op.27 No.1.oga",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_Nocturne_Op.27_No.1.oga",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/e/e0/Chopin_Nocturne_Op.27_No.1.oga?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 3
+  },
+  {
+   "source": "wikimedia",
+   "id": "25285791",
+   "title": "Chopin, Nocturne in C-sharp minor, Op. Posth.ogg",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "cc-by",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin,_Nocturne_in_C-sharp_minor,_Op._Posth.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/1/12/Chopin%2C_Nocturne_in_C-sharp_minor%2C_Op._Posth.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "https://creativecommons.org/licenses/by/3.0",
+   "licence_name": "CC BY 3.0",
+   "n": 4
+  },
+  {
+   "source": "wikimedia",
+   "id": "155174153",
+   "title": "Chopin - Nocturne No. 10 in A-flat major, Op. 32 No. 2 (Olga Gurevich).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Nocturne_No._10_in_A-flat_major,_Op._32_No._2_(Olga_Gurevich).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/7/7c/Chopin_-_Nocturne_No._10_in_A-flat_major%2C_Op._32_No._2_%28Olga_Gurevich%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 5
+  },
+  {
+   "source": "wikimedia",
+   "id": "155173385",
+   "title": "Chopin - Nocturne No. 20 in C-sharp minor, B. 49 (Frank Levy).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin / Frank L\u00e9vy",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Nocturne_No._20_in_C-sharp_minor,_B._49_(Frank_Levy).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Chopin_-_Nocturne_No._20_in_C-sharp_minor%2C_B._49_%28Frank_Levy%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 6
+  }
+ ]
+}

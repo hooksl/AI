@@ -1,0 +1,87 @@
+{
+ "query": "Chopin",
+ "type": "sound",
+ "results": [
+  {
+   "source": "wikimedia",
+   "id": "13389399",
+   "title": "Chopin - Scherzo No. 3.ogg",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Scherzo_No._3.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/3/30/Chopin_-_Scherzo_No._3.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 1
+  },
+  {
+   "source": "wikimedia",
+   "id": "2447026",
+   "title": "Muriel-Nguyen-Xuan-Chopin-valse-opus64-1.ogg",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "cc-by-sa",
+   "page": "https://commons.wikimedia.org/wiki/File:Muriel-Nguyen-Xuan-Chopin-valse-opus64-1.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/c/c4/Muriel-Nguyen-Xuan-Chopin-valse-opus64-1.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "licence_name": "CC BY-SA 4.0",
+   "n": 2
+  },
+  {
+   "source": "wikimedia",
+   "id": "150285091",
+   "title": "F. Chopin - Waltz A flat major Op.34 no. 1 - Greg Niemczuk rehearsal.ogg",
+   "creator": "Greg Niemczuk",
+   "licence": "cc0",
+   "page": "https://commons.wikimedia.org/wiki/File:F._Chopin_-_Waltz_A_flat_major_Op.34_no._1_-_Greg_Niemczuk_rehearsal.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/d/de/F._Chopin_-_Waltz_A_flat_major_Op.34_no._1_-_Greg_Niemczuk_rehearsal.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+   "licence_name": "CC0",
+   "n": 3
+  },
+  {
+   "source": "wikimedia",
+   "id": "97437111",
+   "title": "Chopin Black-keys Flat G Etude (Exercise), player JMC, Han.ogg",
+   "creator": "Jason M. C., Han",
+   "licence": "cc-by-sa",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_Black-keys_Flat_G_Etude_(Exercise),_player_JMC,_Han.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/9/95/Chopin_Black-keys_Flat_G_Etude_%28Exercise%29%2C_player_JMC%2C_Han.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "licence_name": "CC BY-SA 4.0",
+   "n": 4
+  },
+  {
+   "source": "wikimedia",
+   "id": "137940432",
+   "title": "Fr\u00e9d\u00e9ric Chopin - Barcarolle, op.60 (Marcelle Meyer, 1950s).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Fr%C3%A9d%C3%A9ric_Chopin_-_Barcarolle,_op.60_(Marcelle_Meyer,_1950s).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/8/86/Fr%C3%A9d%C3%A9ric_Chopin_-_Barcarolle%2C_op.60_%28Marcelle_Meyer%2C_1950s%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 5
+  },
+  {
+   "source": "wikimedia",
+   "id": "3433339",
+   "title": "Chopin, Fr\u00e9d\u00e9ric - Ballade no. 4 in f minor, op. 52.ogg",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin,_Fr%C3%A9d%C3%A9ric_-_Ballade_no._4_in_f_minor,_op._52.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/4/4f/Chopin%2C_Fr%C3%A9d%C3%A9ric_-_Ballade_no._4_in_f_minor%2C_op._52.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 6
+  }
+ ]
+}

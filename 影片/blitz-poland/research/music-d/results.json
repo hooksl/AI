@@ -1,0 +1,84 @@
+{
+ "query": "Chopin Polonaise",
+ "type": "sound",
+ "results": [
+  {
+   "source": "wikimedia",
+   "id": "8832719",
+   "title": "Chopin Polonaise Fantasie Op61.oga",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_Polonaise_Fantasie_Op61.oga",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/9/94/Chopin_Polonaise_Fantasie_Op61.oga?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 1
+  },
+  {
+   "source": "wikimedia",
+   "id": "7823243",
+   "title": "Chopin - Polonaise Op. 53.oga",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Polonaise_Op._53.oga",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/2/24/Chopin_-_Polonaise_Op._53.oga?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 2
+  },
+  {
+   "source": "wikimedia",
+   "id": "155173270",
+   "title": "Chopin - Polonaise No. 11 in G minor, B. 1 (Luke Faulkner).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin / Luke Faulkner",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Polonaise_No._11_in_G_minor,_B._1_(Luke_Faulkner).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/1/11/Chopin_-_Polonaise_No._11_in_G_minor%2C_B._1_%28Luke_Faulkner%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 3
+  },
+  {
+   "source": "wikimedia",
+   "id": "155171665",
+   "title": "Chopin - Polonaise No. 12 in B-flat major, B. 3 (Aya Higuchi).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Polonaise_No._12_in_B-flat_major,_B._3_(Aya_Higuchi).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Chopin_-_Polonaise_No._12_in_B-flat_major%2C_B._3_%28Aya_Higuchi%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 4
+  },
+  {
+   "source": "wikimedia",
+   "id": "155173317",
+   "title": "Chopin - Polonaise No. 13 in A-flat major, B. 5 (Luke Faulkner).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin / Luke Faulkner",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Polonaise_No._13_in_A-flat_major,_B._5_(Luke_Faulkner).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/b/b5/Chopin_-_Polonaise_No._13_in_A-flat_major%2C_B._5_%28Luke_Faulkner%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 5
+  },
+  {
+   "source": "wikimedia",
+   "id": "155171660",
+   "title": "Chopin - Polonaise No. 10 in F minor, Op. 71 No. 3 (Aya Higuchi).flac",
+   "creator": "Fr\u00e9d\u00e9ric Chopin",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Chopin_-_Polonaise_No._10_in_F_minor,_Op._71_No._3_(Aya_Higuchi).flac",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/9/98/Chopin_-_Polonaise_No._10_in_F_minor%2C_Op._71_No._3_%28Aya_Higuchi%29.flac?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 6
+  }
+ ]
+}

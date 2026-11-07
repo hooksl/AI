@@ -1,0 +1,4 @@
+bpm 120.61 (half-time 60.30) · beat 0.4975 s · bar 1.990 s · pulse 1.36x (no clear beat: ambient, speech or a drone; do not cut to this grid)
+first beat 1.336 s · first downbeat 1.336 s (low-end accent 1.14x the average; under 1.15x the downbeat is a guess)
+bars: 1.34 3.33 5.32 7.30 9.29 11.29 13.28 15.27 …
+clip on a bar line: ffmpeg -ss 1.336 -t <length> -i "assets/music/chopin-scherzo-3-la-pianista.mp3" -af "afade=t=out:st=<length-2>:d=2" -ac 2 -ar 48000 audio/music.wav   (then BPM = 120.61, BEAT0 = 0)

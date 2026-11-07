@@ -1,0 +1,32 @@
+{
+ "query": "Dniester bridge Zaleszczyki",
+ "type": "image",
+ "results": [
+  {
+   "source": "wikimedia",
+   "id": "54109803",
+   "title": "Gesprengte Br\u00fccke \u00fcber den Dnjestr bei Zaleszczyki (BildID 15654189).jpg",
+   "creator": "K.u.k. Kriegspressequartier, Lichtbildstelle - Wien",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Gesprengte_Br%C3%BCcke_%C3%BCber_den_Dnjestr_bei_Zaleszczyki_(BildID_15654189).jpg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/8/83/Gesprengte_Br%C3%BCcke_%C3%BCber_den_Dnjestr_bei_Zaleszczyki_%28BildID_15654189%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Gesprengte_Br%C3%BCcke_%C3%BCber_den_Dnjestr_bei_Zaleszczyki_%28BildID_15654189%29.jpg/500px-Gesprengte_Br%C3%BCcke_%C3%BCber_den_Dnjestr_bei_Zaleszczyki_%28BildID_15654189%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "type": "image",
+   "licence_name": "Public domain",
+   "n": 1
+  },
+  {
+   "source": "wikimedia",
+   "id": "65300211",
+   "title": "Zalishbridge.jpg",
+   "creator": "Unknown authorUnknown author",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Zalishbridge.jpg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/e/e3/Zalishbridge.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Zalishbridge.jpg/500px-Zalishbridge.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+   "type": "image",
+   "licence_name": "Public domain",
+   "n": 2
+  }
+ ]
+}

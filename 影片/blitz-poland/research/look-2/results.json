@@ -1,0 +1,90 @@
+{
+ "query": "Frans Masereel woodcut",
+ "type": "image",
+ "results": [
+  {
+   "source": "aic",
+   "id": "62042",
+   "title": "Still Life with Dead Game, Fruits, and Vegetables in a Market",
+   "creator": "Frans Snyders (Flemish, 1579-1657)",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/62042",
+   "file": "https://www.artic.edu/iiif/2/d9bde524-38b2-4262-3338-e4d06a50746d/full/3000,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/d9bde524-38b2-4262-3338-e4d06a50746d/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 1
+  },
+  {
+   "source": "aic",
+   "id": "862",
+   "title": "Portrait of an Artist",
+   "creator": "Follower of Frans Hals (Dutch, 1582\u20131666)",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/862",
+   "file": "https://www.artic.edu/iiif/2/c95d58bf-fe9e-e5bb-2c71-ab8bad984759/full/1783,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/c95d58bf-fe9e-e5bb-2c71-ab8bad984759/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 2
+  },
+  {
+   "source": "aic",
+   "id": "105945",
+   "title": "Portrait of a Lady",
+   "creator": "Frans Hals (Dutch, 1582\u20131666)",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/105945",
+   "file": "https://www.artic.edu/iiif/2/730ab90f-45c3-ca32-77d0-a43858cdbbab/full/3000,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/730ab90f-45c3-ca32-77d0-a43858cdbbab/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 3
+  },
+  {
+   "source": "aic",
+   "id": "93372",
+   "title": "Study Head of a Bearded Man",
+   "creator": "Frans Floris, I (Netherlandish, by 1520\u20131570)",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/93372",
+   "file": "https://www.artic.edu/iiif/2/34ecfe47-70cc-7f1d-fc4d-af7ba35a570c/full/3000,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/34ecfe47-70cc-7f1d-fc4d-af7ba35a570c/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 4
+  },
+  {
+   "source": "met",
+   "id": "906176",
+   "title": "Kindheit und Jugend /|c11 Illustrationen nach Originalzeichnungen von Frans Mase",
+   "creator": "unknown",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/906176",
+   "file": "https://images.metmuseum.org/CRDImages/li/original/b2188636_001.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/li/web-large/b2188636_001.jpg",
+   "type": "image",
+   "n": 5
+  },
+  {
+   "source": "met",
+   "id": "336280",
+   "title": "Scenes from the Life of Saint John the Baptist",
+   "creator": "Frans Crabbe van Espleghem",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/336280",
+   "file": "https://images.metmuseum.org/CRDImages/dp/original/DT203399.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/dp/web-large/DT203399.jpg",
+   "type": "image",
+   "n": 6
+  },
+  {
+   "source": "met",
+   "id": "631140",
+   "title": "Views of the Surroundings of Haarlem (Beschryvinge ende lof der stad Haerlem in ",
+   "creator": "Claes Jansz. Visscher",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/631140",
+   "file": "https://images.metmuseum.org/CRDImages/dp/original/DP351416.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/dp/web-large/DP351416.jpg",
+   "type": "image",
+   "n": 7
+  }
+ ]
+}

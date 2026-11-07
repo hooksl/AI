@@ -1,0 +1,90 @@
+{
+ "deals": [
+  {
+   "category": "spark",
+   "seed": "2026-11-07:blitz-poland#1",
+   "dealt": [
+    "s1",
+    "s2",
+    "s3"
+   ],
+   "redeal_reason": null,
+   "pick": "s2",
+   "reason": "gold reserve escape between two closing fronts; Moldavian painted walls; rivalry ends in a duet = Brest joint parade",
+   "at": "2026-11-07T18:34",
+   "texts": {
+    "s1": "seed: Daedalia Planum · place: a phone repair stall · form: a letter being written · medium: ultraviolet · era: the last day of summer · tone: suspense",
+    "s2": "seed: churches of Moldavia · place: a cable car above a valley · form: a video game level · medium: manga · engine: a rivalry that ends in a duet · tone: mysterious",
+    "s3": "seed: 3000 BC: Tin extraction in Central Asia · place: a toy shop window · form: a storyboard come alive · medium: ink wash · tone: mythic · colour: chalkboard green and white"
+   },
+   "seeds": {
+    "s1": {
+     "name": "Daedalia Planum",
+     "fact": "Today's VIS image shows a small portion of the immense lava flows that originated from Arsia Mons. Arsia Mons is the southernmost of the three large aligned volcanoes in the Tharsis region. Arsia Mons' last eruption was 10s of million years ago.",
+     "link": "https://images.nasa.gov/details/PIA23993",
+     "pool": "sky"
+    },
+    "s2": {
+     "name": "churches of Moldavia",
+     "fact": "The north of the Moldavia region in Romania preserves numerous religious buildings as a testimony of the Moldavian architectural style developed in the Principality of Moldavia starting from the 14th century.",
+     "link": "https://en.wikipedia.org/wiki/Churches_of_Moldavia",
+     "pool": "place"
+    },
+    "s3": {
+     "name": "3000 BC: Tin extraction in Central Asia",
+     "fact": "Tin is a chemical element; it has the symbol Sn and atomic number 50. A metallic-gray metal, tin is soft enough to be cut with little force, and a bar of tin can be bent by hand with little effort.",
+     "link": "https://en.wikipedia.org/wiki/Tin",
+     "pool": "invention"
+    }
+   }
+  },
+  {
+   "category": "look",
+   "seed": "2026-11-07:blitz-poland#1",
+   "dealt": [
+    "l1",
+    "l2",
+    "l3",
+    "l4",
+    "l5",
+    "l6"
+   ],
+   "redeal_reason": null,
+   "pick": "(re-dealt)",
+   "reason": "medium: hand-made (print, fresco, ink, cut paper); hand mostly film/photo looks",
+   "at": "2026-11-07T18:38",
+   "texts": {
+    "l1": "Wildlife documentary: telephoto, golden backlight",
+    "l2": "Claymation: thumbprints and squash",
+    "l3": "Néstor Almendros: magic hour, natural window light",
+    "l4": "Spike Jonze: playful realism, everyday surreal",
+    "l5": "Georgia O'Keeffe: desert forms, close flowers",
+    "l6": "Y2K: chrome, bubbles, blue"
+   }
+  },
+  {
+   "category": "look",
+   "seed": "2026-11-07:blitz-poland#2",
+   "dealt": [
+    "l1",
+    "l2",
+    "l3",
+    "l4",
+    "l5",
+    "l6"
+   ],
+   "redeal_reason": "medium: hand-made (print, fresco, ink, cut paper); hand mostly film/photo looks",
+   "pick": null,
+   "reason": null,
+   "at": "2026-11-07T18:38",
+   "texts": {
+    "l1": "Tim Burton: gothic curls, black and white stripes, whimsy",
+    "l2": "Mary Blair: mid-century colour, flat shapes",
+    "l3": "Retro travel posters: flat bright destinations",
+    "l4": "Maurice Sendak: crosshatched wild things",
+    "l5": "Janusz Kamiński: blown-out windows, bleached contrast, beams",
+    "l6": "Saul Leiter: colour through glass, layered reflections"
+   }
+  }
+ ]
+}

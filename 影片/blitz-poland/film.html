@@ -1,0 +1,2288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cinecode quick mode: film.html (picture + sound in one file)</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #999; font: 12px/1.4 ui-monospace, Menlo, monospace; }
+  canvas { display: block; max-width: 100vw; max-height: 100vh; margin: 0 auto; }
+  #hud { position: fixed; left: 8px; bottom: 6px; opacity: .75; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">click to play with sound · space pause · arrows step</div>
+<script>
+// cinecode QUICK MODE starter. One file holds the whole film: timeline, scenes, on-screen text and the sound.
+//
+// Contract used by tools/capture.mjs:
+//   window.READY            Promise<{frames, fps, width, height, renderer, title, bounds, vo}>, resolves after fonts are
+//                           loaded (bounds = scene starts + the end, for tools/make.py and the per-scene checks)
+//   window.renderFrame(i)   draws frame i; a pure function of (i / FPS, SEED); nothing carried between frames
+//   window.captureFrame(i)  renderFrame(i) + returns a PNG/JPEG data URL of the canvas
+//   window.renderAudio()    Promise<AudioBuffer>: the whole soundtrack, rendered OFFLINE (OfflineAudioContext)
+// URL params: w, h (default 1080x1920 = 9:16), seed, capture=1 (set by capture.mjs: no preview loop),
+//             shutter=<samples> (0 = motion blur off, for drafts), weave=<px>, tone=0 (finishing overrides)
+//
+// Renders: python3 tools/make.py stills | draft | final (KIT/references/quick-mode.md §3-4). It captures, lays the
+// narration on the score (audio/mix.json), masters to -14 LUFS and runs the checks; never chain capture.mjs,
+// master_audio.py and qc.py by hand.
+//
+// Edit only the FILM section below: TITLE, PURPOSE, FINISH, DURATION, PALETTE, TYPE (roles, check), CUES, VO, SCENES, SFX, ROOM,
+// ARRANGEMENT, the scene functions and score(). Helpers stay as they are: EASE, MOTION (at, back, anticipate, spring, stagger, arc), CAM (pan, tilt, dolly, zoom, truck, crane, orbit, dollyZoom,
+// pushTo, fpv, handheld, matchFrom, rackFocus), retime() (speed ramp, slow motion, time-lapse, freeze), plane(),
+// TRANSITION (dissolve, wipe, whip, iris), lazy() (seeded data built once), label() (on-screen names), and the sound voices.
+// Seeded data (star fields, layouts) is built with lazy() and first used inside a draw call: SEED is set further down
+// the file, so a top-level rng() call here would run before it.
+
+// ============================== FILM ==============================
+const TITLE = '闪电波兰';
+// Purpose (SKILL.md "First questions"): 'cinematic' or 'ad'.
+const PURPOSE = 'cinematic';
+// Look: the film draws its own copperplate engraving (styles/engraving.md); the family below only sets the frame pass.
+const LOOKS = {
+  'engraving': { grade: null, bloom: 0, texture: null, vignette: 0.1, grain: 0, grainHold: Infinity, hold: 24, line: 0, steps: 0,
+    palette: { bg: '#efe5cc', ink: '#1c1510', accent: '#c9a227', dim: '#6f8796', red: '#9b2f2a' } },
+};
+const LOOK_ID = 'engraving';
+const LOOK = LOOKS[LOOK_ID];
+const FINISH = { shutter: null, weave: 0, tone: null };
+const FPS = 24;
+const DURATION = 60;                        // seconds; the picture and the sound both follow this
+const BPM = 120;                            // the recording is rubato (no grid): cues sit on measured onsets instead
+const BEAT0 = 0;
+const beat = (n) => BEAT0 + n * 60 / BPM, bar = (n) => beat(4 * n);
+// Chopin, Scherzo No. 3 Op. 39 (La Pianista, public domain): 20.38-60.6 s of the recording on 0-40, a scripted
+// silence on 40-46, the coda 433.5-447.5 s on 46-60 (audio/music.wav, cut by ffmpeg from assets/music).
+const OWN_MUSIC = { file: 'audio/music.wav', gain: 0.85 };
+const INSTRUMENTS = [];
+const CAST = {};
+const FORMULAS = {};
+// paper, ink, and three washes laid by hand, each reserved for one thing: gold, Romania and the sea, the two flags
+const PALETTE = { bg: '#efe5cc', ink: '#1c1510', accent: '#c9a227', dim: '#6f8796', red: '#9b2f2a' };
+const TYPE = {
+  lang: 'en',
+  roles: {
+    display: { family: 'Noto Serif SC', files: { 600: 'fonts/NotoSerifSC-600-sub.woff2' }, subsets: ['latin'] },
+    text: { family: 'Bodoni Moda', pkg: 'bodoni-moda', version: '5.3.0', weights: [500, 700] },
+    mono: null,
+  },
+  check: { strings: { display: ['华沙', '八十吨黄金 向南', '西线', '越过边境', '康斯坦察', '东线', '布列斯特 联合阅兵', '闪电波兰'],
+    text: ['WARSZAWA ŁUCK ŚNIATYŃ CONSTANȚA BRZEŚĆ IX.1939'] }, sizes: { display: 0.05, text: 0.03 } },
+};
+
+// Cues: measured onsets of the recording (logs: onsets of segment A and the coda), shared by picture and sound.
+const CUES = {
+  lid: 0.05, nail1: 1.40, nail2: 2.62, nail3: 3.82, stencil: 4.10,
+  road: 4.80, bomb1: 7.07, bomb2: 8.85, swerve: 9.17, bomb3: 10.27,
+  map: 12.10, west: 14.85, westB: 16.00,
+  station: 21.30, bridge: 27.02, border: 29.22,
+  port: 31.17, hoist: 32.17, horn: 36.05,
+  turn: 40.00, east: 43.00,
+  brest: 46.00, chords: [46.3, 47.03, 47.75, 48.75, 49.53, 50.18, 50.75, 51.23, 51.68, 52.08, 52.75, 54.53],
+  sea: 56.05, end: DURATION,
+};
+const VO = [];
+const CAPTIONS = null;
+const CAPTION_STYLE = { role: 'display', accentRole: 'display', size: 0.062, caps: false, ink: PALETTE.ink, hi: PALETTE.ink, accent: PALETTE.accent, punch: 0.07 };
+
+const SCENES = [
+  { chapter: 'C1', from: 0, to: CUES.road, draw: crateNailed, action: 'a lid slides over the gold bars and a hammer nails it shut', amb: { kind: 'room', gain: 0.05 } },
+  { chapter: 'C1', from: CUES.road, to: CUES.map, draw: convoyNight, action: 'the convoy drives south through the night and swerves round the bombs', in: { type: 'cut' }, amb: { kind: 'air', gain: 0.06 } },
+  { chapter: 'C1', from: CUES.map, to: CUES.station, draw: routeCut, action: 'the burin cuts the route south while the west hatching presses in', in: { type: 'cut' }, amb: { kind: 'room', gain: 0.04 } },
+  { chapter: 'C2', from: CUES.station, to: CUES.port, draw: borderBridge, action: 'the gold train crosses the border bridge into Romania', in: { type: 'cut' }, amb: { kind: 'air', gain: 0.05 } },
+  { chapter: 'C2', from: CUES.port, to: CUES.turn, draw: portDawn, action: 'a crane hoists the crates aboard and the ship pulls out', in: { type: 'cut' }, amb: { kind: 'water', gain: 0.06 } },
+  { chapter: 'C3', from: CUES.turn, to: CUES.brest, draw: eastCloses, action: 'the east hatching closes the road the gold took', in: { type: 'cut' }, amb: { kind: 'room', gain: 0.03 } },
+  { chapter: 'C3', from: CUES.brest, to: CUES.sea, draw: brestParade, action: 'two columns of tanks parade past one tribune under two red flags', in: { type: 'cut' }, amb: { kind: 'city', gain: 0.05 } },
+  { chapter: 'C3', from: CUES.sea, to: CUES.end, draw: seaGlint, action: 'the ship sails out on the dusk sea with one gold glint', in: { type: 'cut' }, amb: { kind: 'water', gain: 0.05 } },
+];
+
+const SFX = [
+  { at: 0.05, voice: 'foley', kind: 'cloth', gain: 0.5, wet: 0.2 },
+  { at: CUES.nail1, voice: 'hit', gain: 0.55, wet: 0.3 },
+  { at: CUES.nail1, voice: 'foley', kind: 'tap', gain: 0.6, wet: 0.3 },
+  { at: CUES.nail2, voice: 'foley', kind: 'tap', gain: 0.65, wet: 0.3 },
+  { at: CUES.nail2 + 0.01, voice: 'tick', gain: 0.3, wet: 0.3 },
+  { at: CUES.nail3, voice: 'hit', gain: 0.6, wet: 0.3 },
+  { at: CUES.nail3, voice: 'foley', kind: 'tap', gain: 0.7, wet: 0.3 },
+  { at: 4.10, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.19, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.28, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.37, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.46, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.55, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.64, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.73, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: CUES.swerve, voice: 'air', dur: 0.9, gain: 0.25, wet: 0.1 },
+  { at: CUES.map, voice: 'foley', kind: 'cloth', gain: 0.45, wet: 0.15 },
+  { at: 12.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 13.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 13.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 14.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 14.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 15.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 15.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 16.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 16.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 17.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 17.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 18.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 18.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 19.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 19.70, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: 20.20, voice: 'tick', gain: 0.08, wet: 0.1 },
+  { at: CUES.west, voice: 'hit', gain: 0.35, wet: 0.4 },
+  { at: CUES.station, voice: 'air', dur: 1.6, gain: 0.3, wet: 0.2 },
+  { at: CUES.bridge, voice: 'foley', kind: 'step', gain: 0.6, wet: 0.4 },
+  { at: CUES.border, voice: 'foley', kind: 'tap', gain: 0.55, wet: 0.3 },
+  { at: CUES.port, voice: 'foley', kind: 'cloth', gain: 0.25, wet: 0.2 },
+  { at: CUES.hoist, voice: 'foley', kind: 'tap', gain: 0.4, wet: 0.3 },
+  { at: CUES.hoist + 0.18, voice: 'foley', kind: 'tap', gain: 0.3, wet: 0.3 },
+  { at: CUES.hoist + 1.6, voice: 'foley', kind: 'tap', gain: 0.35, wet: 0.3 },
+  { at: CUES.turn, voice: 'foley', kind: 'cloth', gain: 0.4, wet: 0.2 },
+  { at: CUES.east, voice: 'hit', gain: 0.9, wet: 0.5 },
+  { at: CUES.east + 0.5, voice: 'tick', gain: 0.1, wet: 0.2 },
+  { at: CUES.chords[0], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[1], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[2], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[3], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[4], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[5], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[6], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[7], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[8], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[9], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[10], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.chords[11], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: 57.00, voice: 'tick', gain: 0.1, wet: 0.2 },
+  { at: 57.32, voice: 'tick', gain: 0.1, wet: 0.2 },
+  { at: 57.64, voice: 'tick', gain: 0.1, wet: 0.2 },
+  { at: 57.96, voice: 'tick', gain: 0.1, wet: 0.2 },
+];
+const ROOM = { secs: 2.2, decay: 3.2, tone: 5000 };
+const ARRANGEMENT = [{ section: 'recording', from: 0, to: CUES.end, parts: [] }];
+
+// ============================== ENGRAVING (this film's own engine) ==============================
+// Every tone is lines: up to three hatch families (the second crossing at +57°, the third at -38°) switch on by darkness,
+// each line swelling and tapering (styles/engraving.md §2). Shapes are { p: Path2D, b: [x0, y0, x1, y1] } in design units
+// (1920 x 1080, origin at the centre); lines live in the shape's own space, so they travel with it and never swim.
+const DW = 1920, DH = 1080, INK = PALETTE.ink, PAPER = PALETTE.bg, D2R = Math.PI / 180;
+const SH = {
+  rect: (x, y, w, h) => { const p = new Path2D(); p.rect(x, y, w, h); return { p, b: [x, y, x + w, y + h] }; },
+  poly: (pts) => { const p = new Path2D(); let b = [Infinity, Infinity, -Infinity, -Infinity];
+    pts.forEach(([x, y], i) => { i ? p.lineTo(x, y) : p.moveTo(x, y); b = [Math.min(b[0], x), Math.min(b[1], y), Math.max(b[2], x), Math.max(b[3], y)]; });
+    p.closePath(); return { p, b }; },
+  circle: (x, y, r) => { const p = new Path2D(); p.arc(x, y, r, 0, TAU); return { p, b: [x - r, y - r, x + r, y + r] }; },
+  ellipse: (x, y, rx, ry) => { const p = new Path2D(); p.ellipse(x, y, rx, ry, 0, 0, TAU); return { p, b: [x - rx, y - ry, x + rx, y + ry] }; },
+  round: (x, y, w, h, r) => { const p = new Path2D(); p.roundRect(x, y, w, h, r); return { p, b: [x, y, x + w, y + h] }; },
+  join: (...ss) => { const p = new Path2D(); let b = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const s of ss) { p.addPath(s.p); b = [Math.min(b[0], s.b[0]), Math.min(b[1], s.b[1]), Math.max(b[2], s.b[2]), Math.max(b[3], s.b[3])]; }
+    return { p, b }; },
+};
+// darkness fields 0..1 (0 = bare paper); light always from the upper left
+const TN = {
+  lit: (cx, cy, r, base, amt = 0.3, nz = 0.06) => (x, y) => base + amt * ((x - cx) * 0.6 + (y - cy) * 0.8) / r + nz * (noise1(x * 0.021 + y * 0.013 + 3) - 0.5),
+  flat: (v) => () => v,
+  vgrad: (y0, y1, a, b, nz = 0.04) => (x, y) => lerp(a, b, clamp((y - y0) / (y1 - y0))) + nz * (noise1(x * 0.01 + y * 0.03) - 0.5),
+  pool: (cx, cy, r, inner, outer, pw = 1.4) => (x, y) => lerp(inner, outer, Math.pow(clamp(Math.hypot(x - cx, (y - cy) * 1.25) / r), pw)),
+};
+
+const paperTex = lazy(() => {                 // laid paper, made once, laid in world space so the camera moves over it
+  const c = document.createElement('canvas'); c.width = 2600; c.height = 1600;
+  const p = c.getContext('2d'), r = rng(91);
+  p.fillStyle = PAPER; p.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < 46; i++) {               // the sheet's uneven body
+    const x = r() * c.width, y = r() * c.height, rr = 140 + r() * 360, gr = p.createRadialGradient(x, y, 0, x, y, rr);
+    gr.addColorStop(0, r() < 0.55 ? 'rgba(255,250,236,0.12)' : 'rgba(160,128,80,0.07)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    p.fillStyle = gr; p.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+  }
+  p.strokeStyle = '#8a7650'; p.lineWidth = 1;
+  for (let y = 0; y < c.height; y += 8.5) { p.globalAlpha = 0.035 + 0.02 * r(); p.beginPath(); p.moveTo(0, y); p.lineTo(c.width, y + r() - 0.5); p.stroke(); }
+  for (let x = 30; x < c.width; x += 150) { p.globalAlpha = 0.045; p.beginPath(); p.moveTo(x, 0); p.lineTo(x + 4, c.height); p.stroke(); }
+  for (let i = 0; i < 3200; i++) {
+    const x = r() * c.width, y = r() * c.height, a = r() * TAU, l = 3 + r() * 11;
+    p.globalAlpha = 0.05 + r() * 0.09; p.strokeStyle = r() < 0.55 ? '#a08c62' : '#fffaea'; p.lineWidth = 0.6;
+    p.beginPath(); p.moveTo(x, y); p.quadraticCurveTo(x + Math.cos(a) * l / 2 + (r() - 0.5) * 3, y + Math.sin(a) * l / 2 + (r() - 0.5) * 3, x + Math.cos(a) * l, y + Math.sin(a) * l); p.stroke();
+  }
+  p.globalAlpha = 1;
+  for (let i = 0; i < 30; i++) {               // foxing
+    const x = r() * c.width, y = r() * c.height, rr = 2 + r() * 12, gr = p.createRadialGradient(x, y, 0, x, y, rr);
+    gr.addColorStop(0, 'rgba(150,100,45,0.18)'); gr.addColorStop(1, 'rgba(150,100,45,0)'); p.fillStyle = gr; p.fillRect(x - rr, y - rr, rr * 2, rr * 2);
+  }
+  return c;
+});
+
+// the camera: cam = { x, y, z } in design units; f < 1 = a far layer (parallax), zf = its own extra zoom (dolly zoom)
+function camView(g, S, cam = {}, f = 1, zf = 1) {
+  const z = (1 + ((cam.z ?? 1) - 1) * f) * zf, sc = S.W / DW * z;
+  g.setTransform(sc, 0, 0, sc, S.W / 2 - (cam.x ?? 0) * f * sc, S.H / 2 - (cam.y ?? 0) * f * sc);
+}
+function stage(g, S, cam = {}) { camView(g, S, cam); g.drawImage(paperTex(), -1300, -800); }
+
+function emitRun(g, r, nx, ny) {
+  const n = r.length / 3; if (n < 2) return;
+  const hw = (i) => { const u = i / (n - 1), tp = Math.max(0, Math.min(1, u / 0.22, (1 - u) / 0.22)); return r[i * 3 + 2] * 0.5 * (0.16 + 0.84 * Math.pow(tp, 0.7)); };
+  g.moveTo(r[0] + nx * hw(0), r[1] + ny * hw(0));
+  for (let i = 1; i < n; i++) g.lineTo(r[i * 3] + nx * hw(i), r[i * 3 + 1] + ny * hw(i));
+  for (let i = n - 1; i >= 0; i--) g.lineTo(r[i * 3] - nx * hw(i), r[i * 3 + 1] - ny * hw(i));
+  g.closePath();
+}
+function hatchLines(g, box, angDeg, sp, wmax, th, tone, phase = 0) {
+  const a = angDeg * D2R, dx = Math.cos(a), dy = Math.sin(a), nx = -dy, ny = dx;
+  const [x0, y0, x1, y1] = box; let n0 = Infinity, n1 = -Infinity, d0 = Infinity, d1 = -Infinity;
+  for (const [x, y] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1]]) {
+    const n = x * nx + y * ny, d = x * dx + y * dy; n0 = Math.min(n0, n); n1 = Math.max(n1, n); d0 = Math.min(d0, d); d1 = Math.max(d1, d);
+  }
+  const step = Math.max(2.5, sp * 0.75);
+  for (let o = Math.ceil((n0 - phase) / sp) * sp + phase; o <= n1; o += sp) {
+    const li = Math.round(o / sp), jit = 0.82 + 0.36 * hash1(li * 7.31 + angDeg * 0.37);
+    let run = null;
+    for (let s = d0 - step; s <= d1 + step; s += step) {
+      const x = nx * o + dx * s, y = ny * o + dy * s, v = tone(x, y);
+      const w = v > th ? wmax * jit * Math.pow(Math.min(1, (v - th) / 0.34), 0.8) : 0;
+      if (w > 0.14) (run ??= []).push(x, y, w);
+      else if (run) { emitRun(g, run, nx, ny); run = null; }
+    }
+    if (run) emitRun(g, run, nx, ny);
+  }
+}
+function wash(g, s, color, a = 0.6) {          // transparent watercolour: spills a little, a darker tide line at the wet edge
+  g.save(); g.globalCompositeOperation = 'multiply'; g.translate(1.8, 1.2);
+  g.globalAlpha = a; g.fillStyle = color; g.fill(s.p);
+  g.globalAlpha = a * 0.45; g.lineWidth = 2.4; g.strokeStyle = color; g.stroke(s.p); g.restore();
+}
+function contour(g, s, w = 2) {               // fine toward the light, heavier on the far side (kept outside the shape)
+  g.save(); g.strokeStyle = INK; g.lineJoin = 'round'; g.lineWidth = w * 0.5; g.stroke(s.p);
+  const out = new Path2D(); out.rect(-6000, -6000, 12000, 12000); out.addPath(s.p);
+  g.clip(out, 'evenodd'); g.translate(w * 0.45, w * 0.55); g.lineWidth = w; g.stroke(s.p); g.restore();
+}
+const FAMS = [[0, 0.12, 1, 1], [57, 0.47, 0.84, 1.1], [-38, 0.76, 0.68, 1.28]];
+// engrave(g, shape, { angle, tone, sp, w, wash, washA, line, knock, fams, phase })
+function engrave(g, s, o = {}) {
+  const tone = typeof o.tone === 'function' ? o.tone : TN.flat(o.tone ?? 0.4);
+  g.save();
+  if (o.knock !== false) { g.fillStyle = o.knock || PAPER; g.fill(s.p); }
+  if (o.wash) wash(g, s, o.wash, o.washA ?? 0.6);
+  g.clip(s.p); g.beginPath();
+  const a = o.angle ?? 35, sp = o.sp ?? 6.4, w = o.w ?? 2.7;
+  for (const [da, th, wk, sk] of o.fams ?? FAMS) hatchLines(g, s.b, a + da, sp * sk, w * wk, th, tone, o.phase ?? 0);
+  g.fillStyle = INK; g.fill(); g.restore();
+  if (o.line) contour(g, s, o.line);
+}
+function burst(g, x, y, k, r0 = 18, r1 = 70, n = 11, w = 2.4) {   // short engraved rays round an impact, k 0..1
+  if (k <= 0 || k >= 1) return;
+  g.save(); g.fillStyle = INK; g.beginPath();
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + hash1(i + 40) * 0.4, a0 = lerp(r0, r1 * 0.6, EASE.out(k)), a1 = lerp(r0 * 1.4, r1, EASE.out(k));
+    const run = []; for (let j = 0; j <= 6; j++) { const d = lerp(a0, a1, j / 6); run.push(x + Math.cos(a) * d, y + Math.sin(a) * d, w * (1 - k)); }
+    emitRun(g, run, -Math.sin(a), Math.cos(a));
+  }
+  g.fill(); g.restore();
+}
+
+// Lettering belongs to the plate: cut glyph by glyph (a clip opens across each letter like a burin run), never faded.
+function cutText(g, S, str, x, y, px, k, o = {}) {
+  const role = o.role ?? 'display';
+  g.save();
+  if (!o.world) g.setTransform(S.W / DW, 0, 0, S.W / DW, 0, 0);
+  setType(g, TYPE, role, px, { weight: o.weight ?? (role === 'display' ? 600 : 500), track: o.track ?? (role === 'text' ? 0.16 : 0.08), short: DH });
+  g.textBaseline = 'alphabetic'; g.fillStyle = o.color ?? INK;
+  const chars = [...str], ws = chars.map((c) => g.measureText(c).width), gap = px * (o.track ?? (role === 'text' ? 0.16 : 0.08));
+  const total = ws.reduce((a, b) => a + b, 0) + gap * (chars.length - 1);
+  let cx = o.align === 'center' ? x - total / 2 : o.align === 'right' ? x - total : x;
+  const n = chars.length, spread = o.spread ?? 0.7;
+  g.letterSpacing = '0px';
+  chars.forEach((c, i) => {
+    const p = clamp((k - (i / n) * spread) / (1 - spread));
+    if (p > 0) {
+      g.save(); g.beginPath(); g.rect(cx - 2, y - px * 1.2, (ws[i] + 4) * EASE.out(p), px * 1.6); g.clip();
+      g.fillText(c, cx, y); g.restore();
+      if (p < 1 && c.trim()) { g.fillStyle = '#fff8e0'; g.beginPath(); g.arc(cx + ws[i] * EASE.out(p), y - px * 0.35, px * 0.05, 0, TAU); g.fill(); g.fillStyle = o.color ?? INK; }
+    }
+    cx += ws[i] + gap;
+  });
+  g.restore();
+}
+// a plate caption: a small roman line (place and date) over the Chinese line; k = how far the cutting has gone
+function caption(g, S, latin, zh, k, o = {}) {
+  const x = o.x ?? 96, y = o.y ?? 968, al = o.align ?? 'left';
+  if (k > 0) {                                // a deckled paper slip laid down under the words
+    g.save(); g.setTransform(S.W / DW, 0, 0, S.W / DW, 0, 0);
+    setType(g, TYPE, 'display', 60, { weight: 600, short: DH }); const wz = [...(zh || '')].length * 60 * 1.08;
+    setType(g, TYPE, 'text', 34, { weight: 500, short: DH }); g.letterSpacing = '0px'; const wl = g.measureText(latin || '').width + [...(latin || '')].length * 34 * 0.34 + 40;
+    const w = Math.max(wz, wl) + 64, h = 170, x0 = al === 'center' ? x - w / 2 : al === 'right' ? x - w + 32 : x - 32, y0 = y - 132;
+    const r = rng(31), pts = [], lay = EASE.out(clamp(k * 3));
+    for (let i = 0; i <= 20; i++) pts.push([x0 + (w * i) / 20, y0 + (r() - 0.5) * 3]);
+    for (let i = 0; i <= 8; i++) pts.push([x0 + w + (r() - 0.5) * 3, y0 + (h * i) / 8]);
+    for (let i = 20; i >= 0; i--) pts.push([x0 + (w * i) / 20, y0 + h + (r() - 0.5) * 3]);
+    for (let i = 8; i >= 0; i--) pts.push([x0 + (r() - 0.5) * 3, y0 + (h * i) / 8]);
+    g.translate(0, (1 - lay) * 14); g.globalAlpha = lay;
+    g.fillStyle = 'rgba(28,21,16,0.35)'; g.translate(5, 6); g.fill(SH.poly(pts).p); g.translate(-5, -6);
+    g.fillStyle = '#f4ecd8'; g.fill(SH.poly(pts).p); g.strokeStyle = INK; g.lineWidth = 1; g.stroke(SH.poly(pts).p);
+    g.restore();
+  }
+  if (latin) cutText(g, S, latin, x, y - 74, 34, clamp(k * 1.6), { role: 'text', align: al, track: 0.2 });
+  if (zh) cutText(g, S, zh, x, y, 60, clamp(k * 1.6 - 0.35), { role: 'display', align: al });
+}
+function plateFrame(g, S) {                   // the plate mark: a pressed rule and a hairline, fixed to the sheet's edge
+  g.save(); g.setTransform(S.W / DW, 0, 0, S.W / DW, 0, 0); g.strokeStyle = INK;
+  g.lineWidth = 3.2; g.strokeRect(34, 34, DW - 68, DH - 68);
+  g.lineWidth = 1; g.strokeRect(46, 46, DW - 92, DH - 92);
+  g.restore();
+}
+
+// ---- the gold bar: a frustum seen from above, its four slopes lit by the upper-left light, every face gold-washed
+function goldBar(g, x, y, w, h, seed) {
+  const i = 13, X = x + w, Y = y + h;
+  const faces = [
+    [SH.poly([[x + i, y + i], [X - i, y + i], [X - i, Y - i], [x + i, Y - i]]), 0.14, 0],      // top
+    [SH.poly([[x, y], [X, y], [X - i, y + i], [x + i, y + i]]), 0.3, 0],                       // north slope, lit
+    [SH.poly([[x, y], [x + i, y + i], [x + i, Y - i], [x, Y]]), 0.26, 90],                     // west slope, lit
+    [SH.poly([[x, Y], [x + i, Y - i], [X - i, Y - i], [X, Y]]), 0.62, 0],                      // south slope, shade
+    [SH.poly([[X, y], [X, Y], [X - i, Y - i], [X - i, y + i]]), 0.66, 90],                     // east slope, shade
+  ];
+  for (const [s, v, a] of faces) engrave(g, s, { tone: TN.lit(x + w / 2, y + h / 2, w, v, 0.12, 0.05), angle: a, sp: 5.2, w: 2.1, wash: PALETTE.accent, washA: 0.72, line: 1.2 });
+  const st = SH.rect(x + w * 0.32, y + h * 0.32, w * 0.36, h * 0.36);                         // the bank's stamp
+  engrave(g, st, { tone: 0.5, angle: 45, sp: 3.6, w: 1.3, knock: false, line: 1, fams: [[0, 0.12, 1, 1]] });
+  const r = rng(seed); g.save(); g.fillStyle = '#fffbe8'; g.globalAlpha = 0.85;                // burnished glints
+  for (let n = 0; n < 3; n++) { g.beginPath(); g.ellipse(x + i + r() * (w - 2 * i), y + i + 4 + r() * 8, 6 + r() * 10, 1.2, 0, 0, TAU); g.fill(); }
+  g.restore();
+}
+function plank(g, x, y, w, h, seed, base = 0.42) {            // a board: grain along it, knots, a dark seam
+  const r = rng(seed), kx = x + w * (0.2 + 0.6 * r()), ky = y + h * (0.3 + 0.4 * r());
+  const tone = (px, py) => base + 0.16 * (noise1(px * 0.006 + seed) - 0.5) + 0.18 * Math.max(0, 1 - Math.hypot((px - kx) * 0.5, py - ky) / 26) + 0.12 * (py - y) / h;
+  const s = SH.rect(x, y, w, h);
+  engrave(g, s, { tone, angle: 0, sp: 5.6, w: 2.2, fams: [[0, 0.12, 1, 1], [8, 0.55, 0.7, 1.4]], line: 1.6 });
+}
+
+// ---- Scene 1 (0-4.8): Warsaw, the vault. The lid slides over the gold, the hammer nails it, the stencil is cut.
+function crateNailed(g, k, t, S) {
+  // pan, 4.8 s, ease-out, left to right across the crate, with a slow 6% push
+  const cam = { x: lerp(-110, 90, EASE.out(k)), y: lerp(10, -10, k), z: lerp(1.04, 1.1, EASE.inOut(k)) };
+  const nails = [CUES.nail1, CUES.nail2, CUES.nail3], hitAge = Math.min(...nails.map((c) => (t >= c ? t - c : 9)));
+  const jolt = hitAge < 0.25 ? Math.sin(hitAge * 60) * 6 * (1 - hitAge / 0.25) : 0;
+  stage(g, S, { ...cam, y: cam.y + jolt * 0.4 });
+  // the vault floor, lit by one lamp above the crate
+  engrave(g, SH.rect(-1300, -800, 2600, 1600), { tone: TN.pool(-60, -40, 980, 0.32, 1.0), angle: 0, sp: 6.6, w: 3, knock: false });
+  for (let j = -6; j <= 6; j++) { g.save(); g.fillStyle = INK; g.globalAlpha = 0.55; g.fillRect(-1300, j * 120 - 2, 2600, 3); g.restore(); }
+  // the crate: rim boards and its shadow
+  engrave(g, SH.poly([[-600, -320], [660, -320], [700, 360], [-560, 360]]), { tone: 0.9, angle: -20, sp: 5.4, knock: false });
+  const X0 = -620, Y0 = -330, CW = 1240, CH = 660, rim = 46;
+  engrave(g, SH.rect(X0 + rim, Y0 + rim, CW - 2 * rim, CH - 2 * rim), { tone: 0.78, angle: 90, sp: 5.6, line: 2 });
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++)
+    goldBar(g, X0 + rim + 14 + col * 188, Y0 + rim + 18 + row * 140, 172, 118, row * 6 + col + 1);
+  plank(g, X0, Y0, CW, rim, 3, 0.36); plank(g, X0, Y0 + CH - rim, CW, rim, 4, 0.5);
+  g.save(); g.translate(X0, Y0); g.rotate(Math.PI / 2); plank(g, 0, -rim, CH, rim, 5, 0.34); g.restore();
+  g.save(); g.translate(X0 + CW, Y0); g.rotate(Math.PI / 2); plank(g, 0, 0, CH, rim, 6, 0.52); g.restore();
+  // the lid: three boards and two battens slide in from the right, fastest at frame 0
+  const lx = lerp(1300, 0, EASE.inOut(clamp((t - CUES.lid) / 1.3))) + jolt;
+  g.save(); g.translate(lx, 0);
+  engrave(g, SH.rect(X0 + 26, Y0 + 30, CW, CH), { tone: 0.94, angle: -30, sp: 5, knock: false });   // its shadow
+  for (let b = 0; b < 3; b++) plank(g, X0, Y0 + b * (CH / 3), CW, CH / 3, 20 + b, 0.3 + b * 0.05);
+  for (const bx of [X0 + 120, X0 + CW - 190]) plank(g, bx, Y0 - 6, 70, CH + 12, 30 + bx, 0.46);
+  // stencil, cut letter by letter once the nails are in
+  cutText(g, S, 'BANK POLSKI', X0 + CW / 2, Y0 + CH / 2 + 34, 92, clamp((t - CUES.stencil) / 0.7), { role: 'text', weight: 700, world: true, align: 'center', track: 0.18, color: '#2a1d14' });
+  // nail heads appear on their strike
+  const nx = [X0 + 155, X0 + CW / 2, X0 + CW - 155];
+  nails.forEach((c, i) => {
+    if (t < c) return;
+    const s = SH.circle(nx[i], Y0 + 50, 13);
+    engrave(g, s, { tone: TN.lit(nx[i], Y0 + 50, 13, 0.35, 0.5), angle: 45, sp: 3.4, w: 1.6, line: 1.4 });
+    burst(g, nx[i], Y0 + 50, (t - c) / 0.22);
+  });
+  g.restore();
+  // the hammer: raised with anticipation, strikes on the cue, rebounds; it travels from nail to nail
+  const ni = nails.findIndex((c) => t < c + 0.45), idx = ni < 0 ? 2 : ni, c = nails[idx];
+  const hx = nx[idx], hy = Y0 + 50, dtc = t - c;
+  let ang = dtc < -0.55 ? -0.9 : dtc < -0.1 ? lerp(-0.9, -1.25, EASE.inOut((dtc + 0.55) / 0.45)) : dtc < 0 ? lerp(-1.25, 0, EASE.in((dtc + 0.1) / 0.1)) : -0.35 * MOTION.spring(dtc, 0.5, 3) - 0.0;
+  if (t < 0.9) ang = -0.9 - 0.25 * (1 - t / 0.9);
+  const handle = 470, px = hx + 30 + handle, py = hy - 20;
+  g.save(); g.translate(px, py); g.rotate(ang);
+  engrave(g, SH.round(-handle, -16, handle + 40, 32, 10), { tone: TN.lit(-handle / 2, 0, 200, 0.42, 0.25), angle: 0, sp: 5, w: 2.2, line: 1.8 });
+  engrave(g, SH.round(-handle - 46, -64, 92, 128, 8), { tone: TN.lit(-handle, -20, 60, 0.6, 0.3), angle: 90, sp: 4.6, w: 2.3, line: 2.2 });
+  g.restore();
+  caption(g, S, 'WARSZAWA · IX.1939', '华沙', clamp((t - 0.6) / 1.4));
+  plateFrame(g, S);
+}
+
+// ---- Scene 7 (46-56.05): Brest, 22 Sept. A locked frontal frame; tanks of both armies pass the tribune on the coda's chords.
+function soldierRow(n, x0, x1, y, h) {         // standing men far off: helmet, shoulders, a rifle every few
+  const p = new Path2D(), dx = (x1 - x0) / n;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * dx + dx / 2;
+    p.ellipse(x, y - h * 0.86, h * 0.13, h * 0.1, 0, Math.PI, TAU); p.rect(x - h * 0.16, y - h * 0.84, h * 0.32, h * 0.6);
+    p.rect(x - h * 0.12, y - h * 0.26, h * 0.1, h * 0.26); p.rect(x + h * 0.02, y - h * 0.26, h * 0.1, h * 0.26);
+    if (i % 3 === 0) p.rect(x + h * 0.15, y - h * 1.15, 3, h * 0.6);
+  }
+  return { p, b: [x0, y - h * 1.2, x1, y] };
+}
+function figure(x, y, h, salute) {             // an officer on the tribune, a silhouette at distance
+  const p = new Path2D();
+  p.arc(x, y - h * 0.86, h * 0.075, 0, TAU);
+  p.rect(x - h * 0.12, y - h * 0.97, h * 0.24, h * 0.05);
+  p.moveTo(x - h * 0.13, y - h * 0.76); p.lineTo(x + h * 0.13, y - h * 0.76); p.lineTo(x + h * 0.16, y - h * 0.3); p.lineTo(x - h * 0.16, y - h * 0.3); p.closePath();
+  p.rect(x - h * 0.1, y - h * 0.3, h * 0.08, h * 0.3); p.rect(x + h * 0.02, y - h * 0.3, h * 0.08, h * 0.3);
+  if (salute) { p.moveTo(x + h * 0.1, y - h * 0.74); p.lineTo(x + h * 0.2, y - h * 0.86); p.lineTo(x + h * 0.08, y - h * 0.92); p.lineTo(x + h * 0.04, y - h * 0.86); p.closePath(); }
+  return { p, b: [x - h * 0.25, y - h, x + h * 0.25, y] };
+}
+function flag(x, y, w, h, t, ph) {             // cloth on a pole: three folds travelling down the fly
+  const pts = [], wav = (u) => Math.sin(u * 7 - t * 4.2 + ph) * 12 * u;
+  for (let i = 0; i <= 24; i++) { const u = i / 24; pts.push([x + u * w, y + wav(u)]); }
+  for (let i = 24; i >= 0; i--) { const u = i / 24; pts.push([x + u * w * (1 - 0.04 * u), y + h + wav(u) * 1.1]); }
+  return { s: SH.poly(pts), tone: (px) => 0.2 + 0.3 * (0.5 + 0.5 * Math.cos(((px - x) / w) * 7 - t * 4.2 + ph + 1.2)) };
+}
+function tank(g, kind, x, y, t) {             // side view, facing right; wheels turn with the distance travelled
+  const big = kind === 'bt';
+  const hull = big ? SH.poly([[-250, -40], [150, -40], [250, 8], [235, 40], [-250, 40]]) : SH.poly([[-235, -46], [170, -46], [232, -6], [232, 40], [-235, 40]]);
+  const track = SH.round(-260, 18, 515, 96, 48);
+  g.save(); g.translate(x, y);
+  for (let d = 0; d < 5; d++) {                // dust thrown up behind the tracks, thinning as it drifts back
+    const age = (d + (x / 160) % 1) / 5, dx = -280 - age * 260, dr = 26 + age * 60;
+    engrave(g, SH.circle(dx + hash1(d + 3) * 30, 100 - age * 60, dr), { tone: 0.32 * (1 - age), angle: 20, sp: 6, w: 1.8, knock: false, fams: [[0, 0.12, 1, 1]] });
+  }
+  engrave(g, SH.ellipse(0, 128, 300, 18), { tone: 0.85, angle: 0, sp: 5, knock: false });                       // shadow
+  engrave(g, track, { tone: TN.lit(0, 60, 260, 0.72, 0.2), angle: 0, sp: 5.2, w: 2.6, line: 2.2 });
+  const wheels = big ? [-190, -64, 62, 188] : [-196, -118, -40, 38, 116, 194], wr = big ? 46 : 32;
+  for (const wx of wheels) {
+    engrave(g, SH.circle(wx, 66, wr), { tone: TN.lit(wx, 66, wr, 0.42, 0.45), angle: 30, sp: 4.6, w: 2, line: 1.8 });
+    const rot = -x / wr;
+    g.save(); g.fillStyle = INK; for (let s = 0; s < 6; s++) { const a = rot + s * TAU / 6; g.beginPath(); g.arc(wx + Math.cos(a) * wr * 0.62, 66 + Math.sin(a) * wr * 0.62, 3.2, 0, TAU); g.fill(); } g.restore();
+  }
+  engrave(g, hull, { tone: TN.lit(0, 0, 260, 0.36, 0.3), angle: 12, sp: 5.4, w: 2.6, line: 2.4 });
+  const tur = big ? SH.poly([[-90, -40], [70, -40], [90, -78], [60, -112], [-70, -112], [-100, -78]]) : SH.poly([[-60, -46], [80, -46], [96, -96], [-50, -104]]);
+  engrave(g, SH.rect(big ? 80 : 90, big ? -86 : -82, big ? 230 : 110, big ? 12 : 14), { tone: 0.62, angle: 0, sp: 4.2, w: 1.8, line: 1.6 });  // gun
+  engrave(g, tur, { tone: TN.lit(0, -76, 100, 0.34, 0.35), angle: -20, sp: 5, w: 2.4, line: 2.2 });
+  engrave(g, SH.circle(big ? -10 : 10, big ? -116 : -106, 16), { tone: 0.55, angle: 45, sp: 4, w: 1.6, line: 1.4 });  // hatch
+  g.restore();
+}
+function brestParade(g, k, t, S) {
+  // locked frontal frame with a <=2% breathing push; one dolly zoom (49.5-52.5) swells the town behind the tribune
+  const cam = { x: 0, y: 0, z: 1 + 0.02 * EASE.inOut(k) };
+  const dz = 1 + 0.16 * EASE.inOut(clamp((t - 49.5) / 3));
+  stage(g, S, cam);
+  camView(g, S, cam, 0.6, dz);
+  engrave(g, SH.rect(-1300, -800, 2600, 760), { tone: TN.vgrad(-560, -40, 0.1, 0.34), angle: 0, sp: 7, w: 2, knock: false, fams: [[0, 0.12, 1, 1]] });  // cold sky
+  // the town: a row of facades with windows
+  const r = rng(77);
+  let fx = -1250;
+  while (fx < 1250) {
+    const fw = 150 + r() * 170, fh = 220 + r() * 160, top = 60 - fh;
+    engrave(g, SH.poly([[fx, 60], [fx, top], [fx + fw * 0.5, top - 40 - r() * 30], [fx + fw, top], [fx + fw, 60]]), { tone: TN.lit(fx + fw / 2, top + fh / 2, fw, 0.36 + r() * 0.12, 0.2), angle: 90, sp: 5.8, w: 2.2, line: 1.6 });
+    const cols = Math.floor(fw / 52), rows = Math.floor((fh - 50) / 70);
+    for (let a = 0; a < cols; a++) for (let b = 0; b < rows; b++) {
+      const wx = fx + 22 + a * ((fw - 44) / cols) + 6, wy = top + 30 + b * 70;
+      engrave(g, SH.rect(wx, wy, 20, 36), { tone: 0.82, angle: 90, sp: 4, w: 1.8, line: 1 });
+    }
+    fx += fw + 6;
+  }
+  camView(g, S, cam);
+  // the square
+  engrave(g, SH.rect(-1300, 40, 2600, 800), { tone: TN.vgrad(40, 540, 0.24, 0.5), angle: 4, sp: 6.4, w: 2.4, knock: false, fams: [[0, 0.12, 1, 1], [57, 0.47, 0.8, 1.1]] });
+  // flags: two poles, one red for both
+  for (const [px, ph, dir] of [[-440, 0, -1], [440, 1.7, 1]]) {
+    engrave(g, SH.rect(px - 7, -470, 14, 680), { tone: TN.lit(px, 0, 20, 0.4, 0.4), angle: 90, sp: 4, w: 1.6, line: 1.4 });
+    g.save(); g.translate(px, 0); g.scale(dir, 1);
+    const f = flag(7, -458, 270, 170, t, ph);
+    engrave(g, f.s, { tone: f.tone, angle: 70, sp: 5.2, w: 2.2, wash: PALETTE.red, washA: 0.78, line: 1.8 });
+    g.restore();
+  }
+  // soldiers in ranks on both sides
+  engrave(g, soldierRow(16, -960, -560, 168, 74), { tone: 0.78, angle: 80, sp: 4.2, w: 1.8, line: 1 });
+  engrave(g, soldierRow(16, 560, 960, 168, 74), { tone: 0.78, angle: 80, sp: 4.2, w: 1.8, line: 1 });
+  // the tribune: a stepped wooden stand, railing, two officers side by side
+  engrave(g, SH.poly([[-300, 210], [300, 210], [270, 40], [-270, 40]]), { tone: TN.lit(0, 120, 300, 0.5, 0.2), angle: 0, sp: 5.4, w: 2.4, line: 2 });
+  engrave(g, SH.rect(-270, 18, 540, 24), { tone: 0.3, angle: 0, sp: 5, w: 2, line: 1.6 });
+  for (let i = 0; i <= 10; i++) engrave(g, SH.rect(-262 + i * 52, -40, 8, 60), { tone: 0.5, angle: 90, sp: 3.6, w: 1.4, line: 1 });
+  engrave(g, SH.rect(-270, -46, 540, 10), { tone: 0.35, angle: 0, sp: 4, w: 1.6, line: 1.2 });
+  engrave(g, figure(-60, 18, 120, false), { tone: 0.84, angle: 75, sp: 3.8, w: 1.8, line: 1.2 });
+  engrave(g, figure(60, 18, 124, true), { tone: 0.84, angle: 105, sp: 3.8, w: 1.8, line: 1.2 });
+  // the column: one tank on each chord, the two armies taking turns
+  const v = 760;
+  CUES.chords.forEach((c, i) => {
+    const x = (t - c) * v;
+    if (x > -1500 && x < 1500) tank(g, i % 2 ? 'bt' : 'pz', x, 318, t);
+  });
+  caption(g, S, 'BRZEŚĆ · 22.IX.1939', '布列斯特 联合阅兵', clamp((t - CUES.brest - 0.4) / 1.6), { x: DW / 2, align: 'center', y: 210 });
+  plateFrame(g, S);
+}
+
+// ---- Scene 2 (4.80-12.10): the night road. The convoy runs south with dimmed lamps; bombs fall ahead; it swerves.
+function wheel(g, x, y, r, rot, tone = 0.55) {
+  engrave(g, SH.circle(x, y, r), { tone: TN.lit(x, y, r, tone, 0.4), angle: 30, sp: 4.2, w: 1.9, line: 1.6 });
+  engrave(g, SH.circle(x, y, r * 0.45), { tone: 0.3, angle: 0, sp: 3.6, w: 1.4, line: 1 });
+  g.save(); g.fillStyle = INK; for (let s = 0; s < 5; s++) { const a = rot + s * TAU / 5; g.beginPath(); g.arc(x + Math.cos(a) * r * 0.3, y + Math.sin(a) * r * 0.3, 2.4, 0, TAU); g.fill(); } g.restore();
+}
+function lampBeam(g, x, y, len, spread, k = 1) {   // a dimmed headlamp: a cone of bare paper cut out of the night
+  const s = SH.poly([[x, y - 6], [x + len, y - spread * 0.35], [x + len, y + spread], [x, y + 6]]);
+  engrave(g, s, { tone: (px) => 0.05 + 0.32 * clamp((px - x) / len), angle: -4, sp: 7, w: 1.6, knock: 'rgba(243,234,210,' + (0.9 * k).toFixed(2) + ')', fams: [[0, 0.12, 1, 1]] });
+}
+function bus(g, x, y, t, seed, sc = 1) {     // a 1930s city bus pressed into service: rounded roof, a row of windows, two axles
+  g.save(); g.translate(x, y); g.scale(sc, sc);
+  lampBeam(g, 205, 40, 420, 120);
+  const body = SH.poly([[-210, 70], [-210, -70], [-180, -100], [170, -100], [200, -70], [212, -10], [212, 70]]);
+  engrave(g, body, { tone: TN.lit(0, -20, 220, 0.6, 0.22), angle: 0, sp: 5, w: 2.6, line: 2.2 });
+  for (let i = 0; i < 6; i++) engrave(g, SH.rect(-180 + i * 58, -78, 44, 52), { tone: 0.92, angle: 90, sp: 3.8, w: 1.8, line: 1.2 });
+  engrave(g, SH.rect(-210, 2, 422, 10), { tone: 0.35, angle: 0, sp: 3.6, w: 1.4, line: 1 });
+  engrave(g, SH.circle(204, 38, 9), { tone: 0.04, knock: '#fff6dc', line: 1.4 });
+  const rot = x / 46; wheel(g, -130, 74, 40, rot); wheel(g, 128, 74, 40, rot);
+  g.restore();
+}
+function truck(g, x, y, t, seed, sc = 1) {   // a covered lorry: cab, bonnet, canvas tilt over the crates, three wheels
+  g.save(); g.translate(x, y); g.scale(sc, sc);
+  lampBeam(g, 222, 34, 420, 120);
+  engrave(g, SH.poly([[-230, 50], [-230, -80], [-216, -104], [60, -104], [74, -80], [74, 50]]), { tone: TN.lit(-80, -40, 200, 0.5, 0.2), angle: 90, sp: 5.2, w: 2.4, line: 2.2,
+    fams: [[0, 0.12, 1, 1], [57, 0.47, 0.84, 1.1], [-38, 0.76, 0.68, 1.28]] });                                       // canvas tilt
+  for (let i = 1; i < 5; i++) engrave(g, SH.rect(-230 + i * 60, -100, 5, 150), { tone: 0.8, angle: 90, sp: 3, w: 1.3, knock: false });
+  engrave(g, SH.poly([[74, 54], [74, -64], [150, -64], [168, -14], [226, -8], [226, 54]]), { tone: TN.lit(150, 0, 120, 0.56, 0.24), angle: 0, sp: 5, w: 2.4, line: 2.2 });
+  engrave(g, SH.rect(92, -52, 52, 38), { tone: 0.9, angle: 90, sp: 3.6, w: 1.6, line: 1.2 });
+  engrave(g, SH.circle(218, 32, 8), { tone: 0.04, knock: '#fff6dc', line: 1.4 });
+  const rot = x / 38; wheel(g, -170, 64, 34, rot); wheel(g, -96, 64, 34, rot); wheel(g, 168, 64, 34, rot);
+  g.restore();
+}
+function blast(g, x, y, age) {                // a bomb on the road: flash, rays, then a rising column of smoke
+  if (age < 0 || age > 2.6) return;
+  const fl = clamp(1 - age / 0.35);
+  if (fl > 0) engrave(g, SH.circle(x, y, 60 + 160 * EASE.out(clamp(age / 0.3))), { tone: (px, py) => 0.04 + 0.4 * clamp(Math.hypot(px - x, py - y) / 220), angle: 0, sp: 8, w: 1.4, knock: 'rgba(255,248,226,' + (0.95 * fl).toFixed(2) + ')', fams: [[0, 0.12, 1, 1]] });
+  burst(g, x, y, age / 0.5, 40, 260, 15, 4);
+  for (let i = 0; i < 6; i++) {
+    const a = clamp(age / 2.6), rr = 40 + i * 14 + a * 90, cy = y - 30 - i * 46 * EASE.out(clamp(age / 1.4)) - a * 80;
+    engrave(g, SH.circle(x + (hash1(i + 9) - 0.5) * 50 + a * 60, cy, rr * 0.8), { tone: TN.lit(x, cy, rr * 2, 0.8 - 0.2 * a, 0.12), angle: 60 + i * 15, sp: 5.6, w: 2.2, line: 1.4 * (1 - a) });
+  }
+}
+function convoyNight(g, k, t, S) {
+  // tracking shot, 7.3 s, constant, along the convoy from the roadside; it drifts forward in frame
+  const lt = t - CUES.road, cam = { x: 260 * lt, y: 110, z: 1 };
+  stage(g, S, cam);
+  camView(g, S, cam, 0.15);
+  engrave(g, SH.rect(-1300 + cam.x * 0.15, -800, 2600, 900), { tone: TN.vgrad(-560, 60, 0.92, 0.72, 0.05), angle: 0, sp: 6.4, w: 2.8, knock: false });   // night sky
+  camView(g, S, cam, 0.35);
+  const r = rng(8), x0 = Math.floor((cam.x * 0.35 - 1400) / 90) * 90;
+  const hills = []; for (let x = x0; x < x0 + 2900; x += 30) hills.push([x, -40 - 50 * noise1(x * 0.004 + 2) - 30 * noise1(x * 0.02)]);
+  engrave(g, SH.poly([...hills, [x0 + 2900, 200], [x0, 200]]), { tone: 0.8, angle: 15, sp: 5.6, w: 2.6, line: 1.6 });                     // far ridge
+  // a plane far up, crossing before the first bomb (no siren: a drone in the score)
+  const pa = clamp((t - 5.6) / 2.4);
+  if (pa > 0 && pa < 1) { const px = cam.x * 0.35 - 900 + pa * 1800, py = -380 + pa * 40; g.save(); g.translate(px, py);
+    engrave(g, SH.poly([[-60, 0], [50, -6], [64, 0], [50, 6]]), { tone: 0.9, angle: 0, sp: 3, line: 1.4 });
+    engrave(g, SH.poly([[-6, -2], [20, -2], [6, -44], [-6, -44]]), { tone: 0.9, angle: 0, sp: 3, line: 1.2 });
+    engrave(g, SH.poly([[-6, 2], [20, 2], [6, 30], [-6, 30]]), { tone: 0.9, angle: 0, sp: 3, line: 1.2 }); g.restore(); }
+  camView(g, S, cam, 0.7);
+  for (let i = Math.floor((cam.x * 0.7 - 1300) / 230); i < Math.floor((cam.x * 0.7 + 1300) / 230); i++) {   // poplars along the verge
+    const tx = i * 230 + hash1(i) * 60, th = 300 + hash1(i + 50) * 120;
+    engrave(g, SH.ellipse(tx, 120 - th / 2, 34 + hash1(i + 5) * 10, th / 2), { tone: TN.lit(tx, 120 - th / 2, 60, 0.72, 0.25), angle: 80, sp: 4.6, w: 2.2, line: 1.4 });
+    engrave(g, SH.rect(tx - 5, 110, 10, 40), { tone: 0.8, angle: 90, sp: 3, w: 1.4 });
+  }
+  camView(g, S, cam);
+  engrave(g, SH.rect(cam.x - 1300, 140, 2600, 700), { tone: TN.vgrad(140, 540, 0.7, 0.86), angle: 3, sp: 6, w: 2.6, knock: false });   // the road
+  const blasts = [CUES.bomb1, CUES.bomb2, CUES.bomb3];
+  blasts.forEach((c, i) => blast(g, 260 * (c - CUES.road) + 760 + i * 40, 210, t - c));
+  const sw = Math.sin(clamp((t - CUES.swerve) / 1.2) * Math.PI) * 46;          // the swerve round the second crater
+  const v = 320;                               // the convoy runs a little faster than the camera
+  const units = [[bus, -1250], [truck, -520], [bus, 210], [truck, 940]];
+  units.forEach(([f, off], i) => {
+    const x = off + v * lt - 40, lag = i * 0.12, bob = Math.sin((t + i) * 9) * 2.2;
+    f(g, x, 300 + bob + sw * clamp((t - CUES.swerve - lag) / 0.4) * (i % 2 ? 1 : 0.8), t, i, 1.32);
+  });
+  caption(g, S, 'IX.1939 · 80 T', '八十吨黄金 向南', clamp((t - CUES.road - 0.5) / 1.6), { y: 236 });
+  plateFrame(g, S);
+}
+
+// ---- the map plate, shared by S3 and S6: Poland in 1939, the route cut by the burin, two fronts of hatching
+const GEO = { lon0: 23.4, lat0: 51.4, k: 44 };
+const geo = (lon, lat) => [(lon - GEO.lon0) * GEO.k, -(lat - GEO.lat0) * GEO.k * 1.55];
+const POLAND = [[17.9, 54.8], [18.55, 54.75], [18.8, 54.3], [19.3, 53.6], [20.2, 53.2], [21.5, 53.1], [22.6, 53.6], [22.9, 54.3], [23.5, 54.35], [24.6, 54.1],
+  [25.4, 54.6], [26.6, 55.6], [27.6, 55.2], [28.2, 54.6], [27.6, 53.6], [26.9, 52.9], [27.8, 51.7], [27.3, 50.9], [26.6, 50.3], [26.2, 49.8], [26.4, 48.9],
+  [25.9, 48.3], [25.2, 48.0], [24.6, 48.1], [23.5, 48.9], [22.6, 49.05], [21.6, 49.4], [20.9, 49.35], [19.8, 49.2], [19.0, 49.5], [18.6, 49.9], [17.9, 50.05],
+  [18.4, 50.4], [18.2, 51.1], [17.4, 51.2], [16.9, 51.6], [16.3, 51.95], [16.0, 52.4], [16.2, 52.9], [16.8, 53.2], [17.0, 53.7], [17.4, 54.2], [17.6, 54.6]];
+const ROMANIA = [[22.6, 49.05], [23.5, 48.9], [24.6, 48.1], [25.2, 48.0], [25.9, 48.3], [26.6, 48.2], [28.2, 47.9], [29.6, 46.4], [29.0, 45.2], [27.0, 44.6], [22.4, 44.8], [21.2, 46.4], [22.0, 47.8]];
+const CITIES = { 'WARSZAWA': [21.0, 52.23], 'LUBLIN': [22.57, 51.25], 'ŁUCK': [25.33, 50.75], 'BRZEŚĆ': [23.65, 52.1], 'ŚNIATYŃ': [25.57, 48.45] };
+const ROUTE = [[21.0, 52.23], [21.9, 51.7], [22.57, 51.25], [23.9, 50.95], [25.33, 50.75], [25.6, 50.0], [25.5, 49.2], [25.57, 48.45], [26.0, 47.9]];
+function routeAt(u) {                          // a point u (0..1) along the route and the cut so far
+  const P = ROUTE.map(([a, b]) => geo(a, b)), L = [0];
+  for (let i = 1; i < P.length; i++) L.push(L[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+  const d = u * L[L.length - 1], pts = [P[0]];
+  let i = 1; while (i < P.length && L[i] < d) { pts.push(P[i]); i++; }
+  if (i < P.length) { const f = (d - L[i - 1]) / (L[i] - L[i - 1]); pts.push([lerp(P[i - 1][0], P[i][0], f), lerp(P[i - 1][1], P[i][1], f)]); }
+  return pts;
+}
+function mapPlate(g, S, t, o) {               // o: { west 0..1, east 0..1, route 0..1, romania wash 0..1, dot (show the gold) }
+  const R = 470;
+  engrave(g, SH.circle(0, 0, R + 26), { tone: 0.1, angle: 0, sp: 3, w: 1, line: 3 });
+  const disc = SH.circle(0, 0, R);
+  engrave(g, disc, { tone: 0.2, angle: 0, sp: 4.2, w: 1.1, fams: [[0, 0.12, 1, 1]], line: 1.2 });             // ruled-machine ground
+  g.save(); g.clip(disc.p);
+  const rom = SH.poly(ROMANIA.map(([a, b]) => geo(a, b)));
+  engrave(g, rom, { tone: 0.3, angle: 45, sp: 5, w: 1.6, line: 1.6, wash: o.romania > 0 ? PALETTE.dim : null, washA: 0.55 * o.romania });
+  const pl = SH.poly(POLAND.map(([a, b]) => geo(a, b)));
+  engrave(g, pl, { tone: TN.lit(0, 0, 400, 0.13, 0.08, 0.04), angle: 0, sp: 6, w: 1.4, line: 2.6 });
+  // the fronts: hatching that presses in from the west (and later the east), its edge ragged like a cut not yet cleaned
+  const wx = lerp(-480, 60, o.west), ex = lerp(520, 60, o.east);
+  if (o.west > 0 || o.east > 0) engrave(g, pl, { knock: false, angle: -30, sp: 5.2, w: 2.8,
+    tone: (x, y) => { const j = 40 * (noise1(y * 0.02 + 4) - 0.5); return Math.max(o.west > 0 ? 0.92 * clamp((wx + j - x) / 60) : 0, o.east > 0 ? 0.92 * clamp((x - ex - j) / 60) : 0); } });
+  // the route: cut by the burin, the gold point riding at its tip (the signature)
+  const pts = routeAt(o.route);
+  if (pts.length > 1) { g.save(); g.strokeStyle = INK; g.lineWidth = 5; g.setLineDash([16, 9]); g.lineCap = 'round'; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); g.restore(); }
+  for (const [name, [a, b]] of Object.entries(CITIES)) {
+    const [x, y] = geo(a, b); engrave(g, SH.circle(x, y, 9), { tone: 0.8, angle: 0, sp: 2.4, w: 1.4, line: 1.2 });
+    const lo = name === 'BRZEŚĆ' ? [16, 30] : name === 'WARSZAWA' ? [-16, -14] : [16, -12];
+    cutText(g, S, name, x + lo[0], y + lo[1], 24, 1, { role: 'text', world: true, track: 0.14, weight: 700, align: lo[0] < 0 ? 'right' : 'left' });
+  }
+  const tip = pts[pts.length - 1];
+  if (o.dot) {
+    engrave(g, SH.circle(tip[0], tip[1], 15), { tone: 0.2, angle: 30, sp: 3, w: 1.4, wash: PALETTE.accent, washA: 0.9, line: 1.6 });
+    if (o.route > 0 && o.route < 1) {          // the burin: a lozenge steel shaft held low behind the point, swarf curling ahead
+      g.save(); g.translate(tip[0], tip[1]); g.rotate(-0.6);
+      engrave(g, SH.poly([[18, -4], [150, -12], [158, 0], [150, 12], [18, 4]]), { tone: TN.lit(80, 0, 80, 0.4, 0.4), angle: 0, sp: 3.4, w: 1.4, line: 1.6 });
+      g.strokeStyle = INK; g.lineWidth = 1.6; g.beginPath(); for (let i = 0; i < 30; i++) { const a = i * 0.5 + t * 6, rr = 4 + i * 0.6; g.lineTo(-10 - i * 1.2 + Math.cos(a) * rr, -10 + Math.sin(a) * rr * 0.6); } g.stroke();
+      g.restore();
+    }
+  }
+  cutText(g, S, 'ROMÂNIA', geo(26.3, 46.6)[0], geo(26.3, 46.6)[1], 30, 1, { role: 'text', world: true, track: 0.3, align: 'center', weight: 700 });
+  cutText(g, S, 'POLSKA', geo(20.4, 50.6)[0], geo(20.4, 50.6)[1], 34, 1, { role: 'text', world: true, track: 0.4, align: 'center', weight: 700 });
+  g.restore();
+  return tip;
+}
+function routeCut(g, k, t, S) {
+  // pull-back reveal, 3 s, ease-out, from the gold point at Warsaw to the whole plate, then a held loupe
+  const w = geo(21.0, 52.23), pk = EASE.out(clamp((t - CUES.map) / 3));
+  const cam = { x: lerp(w[0], 0, pk), y: lerp(w[1], 0, pk), z: lerp(2.6, 1.02, pk) };
+  stage(g, S, cam);
+  mapPlate(g, S, t, { west: 0.55 * EASE.inOut(clamp((t - CUES.west) / 5.5)), east: 0, route: EASE.inOut(clamp((t - CUES.map - 0.6) / 8.2)), romania: 0, dot: true });
+  caption(g, S, '1.IX.1939', '西线', clamp((t - CUES.west + 0.2) / 1.4));
+  plateFrame(g, S);
+}
+function eastCloses(g, k, t, S) {
+  // locked frame on the plate; the east front closes the road the gold took, in silence
+  stage(g, S, { x: 0, y: 0, z: 1.02 });
+  const tip = mapPlate(g, S, t, { west: 0.55 + 0.45 * EASE.inOut(clamp((t - CUES.turn) / 5.2)), east: EASE.out(clamp((t - CUES.east) / 1.8)), route: 1, romania: 1, dot: false });
+  burst(g, geo(27.4, 51.2)[0], geo(27.4, 51.2)[1], (t - CUES.east) / 0.4, 30, 160, 13, 3);
+  caption(g, S, '17.IX.1939', '东线', clamp((t - CUES.east - 0.2) / 1.4), { x: 1824, align: 'right' });
+  plateFrame(g, S);
+}
+
+// ---- Scene 4 (21.30-31.17): Śniatyń at dusk. The gold train leaves the platform and crosses the border bridge.
+function locomotive(g, x, y, t, moving) {
+  g.save(); g.translate(x, y);
+  engrave(g, SH.round(-150, -150, 330, 120, 30), { tone: TN.lit(0, -100, 200, 0.5, 0.3), angle: 0, sp: 4.8, w: 2.4, line: 2.2 });   // boiler
+  engrave(g, SH.rect(170, -160, 30, 140), { tone: 0.66, angle: 90, sp: 4, w: 2, line: 1.8 });                                      // smokebox
+  engrave(g, SH.rect(120, -212, 34, 64), { tone: TN.lit(137, -180, 30, 0.5, 0.4), angle: 90, sp: 3.6, w: 1.8, line: 1.6 });       // chimney
+  engrave(g, SH.ellipse(30, -156, 26, 18), { tone: 0.45, angle: 30, sp: 3.6, w: 1.6, line: 1.4 });                              // dome
+  engrave(g, SH.poly([[-260, -30], [-260, -200], [-140, -200], [-140, -30]]), { tone: TN.lit(-200, -110, 120, 0.56, 0.2), angle: 90, sp: 4.6, w: 2.2, line: 2 }); // cab
+  engrave(g, SH.rect(-236, -176, 64, 56), { tone: 0.94, angle: 90, sp: 3.4, w: 1.8, line: 1.2 });
+  engrave(g, SH.rect(-270, -34, 480, 26), { tone: 0.72, angle: 0, sp: 4, w: 2, line: 1.8 });
+  const rot = x / 50; for (const wx of [-90, 20, 130]) wheel(g, wx, 18, 50, rot, 0.5);
+  wheel(g, -220, 34, 32, rot * 1.5);
+  g.strokeStyle = INK; g.lineWidth = 6; g.beginPath(); g.moveTo(-90 + Math.cos(rot) * 26, 18 + Math.sin(rot) * 26); g.lineTo(130 + Math.cos(rot) * 26, 18 + Math.sin(rot) * 26); g.stroke();   // coupling rod
+  g.restore();
+}
+function boxcar(g, x, y, seed) {
+  g.save(); g.translate(x, y);
+  engrave(g, SH.rect(-170, -170, 340, 150), { tone: (px, py) => 0.5 + 0.14 * (noise1(px * 0.05 + seed) - 0.5) + 0.1 * (py + 170) / 150, angle: 90, sp: 5, w: 2.4, line: 2 });
+  for (let i = 1; i < 6; i++) engrave(g, SH.rect(-170 + i * 56.6, -170, 3, 150), { tone: 0.85, angle: 90, sp: 2, w: 1.2, knock: false });
+  engrave(g, SH.poly([[-180, -170], [180, -170], [168, -190], [-168, -190]]), { tone: 0.4, angle: 0, sp: 4, w: 1.8, line: 1.6 });
+  engrave(g, SH.rect(-180, -22, 360, 14), { tone: 0.75, angle: 0, sp: 3, w: 1.6, line: 1.2 });
+  const rot = x / 28; wheel(g, -110, 10, 28, rot); wheel(g, 110, 10, 28, rot);
+  g.restore();
+}
+function steam(g, x, y, t, amt) {             // puffs from the chimney, rising and thinning backwards
+  for (let i = 0; i < 7; i++) {
+    const ph = ((t * 1.6 + i / 7) % 1), rr = 18 + ph * 54;
+    engrave(g, SH.circle(x - ph * 220 * amt - 20, y - ph * 200, rr), { tone: TN.lit(x, y - ph * 200, rr * 2, 0.5 - ph * 0.26, 0.12), angle: 40, sp: 5, w: 1.8, line: 1.2 * (1 - ph) });
+  }
+}
+function borderBridge(g, k, t, S) {
+  // crane up, 9.9 s, slow ease-in-out, from the platform to the bridge, trucking right with the train
+  const cam = { x: lerp(-560, 380, EASE.inOut(k)), y: lerp(170, 70, EASE.inOut(k)), z: lerp(1.12, 1.0, EASE.inOut(k)) };
+  stage(g, S, cam);
+  camView(g, S, cam, 0.4);
+  engrave(g, SH.rect(-1500, -900, 3400, 1000), { tone: (x, y) => 0.12 + 0.5 * clamp((x + 1300) / 3000) * clamp((y + 900) / 900 + 0.3), angle: 0, sp: 6, w: 2.2, knock: false });  // dusk sky, light low in the west
+  engrave(g, SH.circle(-900, 30, 70), { tone: 0.02, knock: '#fbf2da', angle: 0, line: 1 });                                             // the sun going down
+  const hill = []; for (let x = -1500; x <= 1900; x += 40) hill.push([x, 40 - 60 * noise1(x * 0.003 + 7)]);
+  engrave(g, SH.poly([...hill, [1900, 200], [-1500, 200]]), { tone: 0.62, angle: 20, sp: 5.4, w: 2.2, line: 1.4 });
+  camView(g, S, cam);
+  // the river below the bridge, light on it from the west
+  engrave(g, SH.rect(-400, 260, 1500, 500), { tone: (x, y) => 0.4 + 0.3 * clamp((x + 400) / 1500) + 0.1 * Math.sin(y * 0.3 + t * 2), angle: 0, sp: 5.4, w: 2.4, knock: false });
+  engrave(g, SH.poly([[-1800, 200], [-400, 200], [-340, 760], [-1800, 760]]), { tone: TN.lit(-1000, 400, 600, 0.55, 0.2), angle: 30, sp: 5.6, w: 2.4, line: 2 });   // home bank
+  const bw0 = clamp((t - CUES.border) / 0.9);
+  engrave(g, SH.poly([[1000, 200], [2400, 200], [2400, 760], [1060, 760]]), { tone: TN.lit(1600, 400, 600, 0.58, 0.2), angle: -30, sp: 5.6, w: 2.4, line: 2, wash: bw0 > 0 ? PALETTE.dim : null, washA: 0.75 * bw0 });  // far bank: Romania
+  // the station platform and its lamp
+  engrave(g, SH.rect(-1800, 120, 1300, 80), { tone: TN.lit(-1100, 160, 400, 0.4, 0.2), angle: 0, sp: 5, w: 2.2, line: 1.8 });
+  engrave(g, SH.rect(-1400, -320, 16, 440), { tone: 0.7, angle: 90, sp: 3, w: 1.6, line: 1.4 });
+  engrave(g, SH.poly([[-1420, -330], [-1372, -330], [-1384, -300], [-1408, -300]]), { tone: 0.5, angle: 0, sp: 3, w: 1.6, line: 1.4 });
+  // the bridge: piers and a through truss
+  for (const px of [-380, 160, 700, 1020]) engrave(g, SH.poly([[px - 40, 200], [px + 40, 200], [px + 54, 700], [px - 54, 700]]), { tone: TN.lit(px, 400, 80, 0.5, 0.4), angle: 90, sp: 4.6, w: 2.2, line: 1.8 });
+  engrave(g, SH.rect(-420, 186, 1480, 30), { tone: 0.66, angle: 0, sp: 4, w: 2, line: 1.8 });
+  for (let i = 0; i < 12; i++) {
+    const x0 = -400 + i * 120;
+    g.save(); g.translate(x0, 186); g.rotate((i % 2 ? 1 : -1) * Math.atan2(200, 120));
+    engrave(g, SH.rect(0, -6, Math.hypot(200, 120) * (i % 2 ? -1 : 1), 12), { tone: 0.6, angle: 0, sp: 3, w: 1.6, line: 1.2 }); g.restore();
+    engrave(g, SH.rect(x0 - 5, -14, 10, 200), { tone: 0.6, angle: 90, sp: 3, w: 1.4, line: 1.2 });
+  }
+  engrave(g, SH.rect(-410, -24, 1460, 18), { tone: 0.6, angle: 0, sp: 3.4, w: 1.8, line: 1.6 });
+  // the border post on the far bank: striped barrier and sentry box; Romania's wash blooms when the train reaches it
+  const bw = clamp((t - CUES.border) / 0.8);
+  engrave(g, SH.poly([[1060, 190], [1060, 40], [1090, 10], [1120, 40], [1120, 190]]), { tone: TN.lit(1090, 100, 60, 0.4, 0.3), angle: 90, sp: 4, w: 1.8, line: 1.6, wash: bw > 0 ? PALETTE.dim : null, washA: 0.7 * bw });
+  g.save(); g.translate(1010, 150); g.rotate(-1.2 * EASE.out(clamp((t - CUES.border + 0.7) / 0.7)));
+  for (let i = 0; i < 6; i++) engrave(g, SH.rect(i * 30, -7, 30, 14), { tone: i % 2 ? 0.75 : 0.08, angle: 0, sp: 3, w: 1.6, line: 1, wash: i % 2 || bw <= 0 ? null : PALETTE.dim, washA: 0.7 * bw });
+  g.restore();
+  // the train: still at the platform until 25 s, then away over the bridge, the locomotive at the post on the border cue
+  const go = clamp((t - 25.0) / (CUES.border - 25.0)), tx = lerp(-900, 960, go * go * (1.4 - 0.4 * go)) + Math.max(0, t - CUES.border) * 300;
+  steam(g, tx + 137, 186 - 212 - 70, t, 0.4 + go);
+  for (let i = 0; i < 4; i++) boxcar(g, tx - 450 - i * 370, 166, i + 2);
+  locomotive(g, tx, 166, t, go > 0);
+  if (t < 25.4) for (let i = 0; i < 3; i++) {   // the last crates handed up, men at a distance
+    const fx = -1150 + i * 140, carry = Math.sin(clamp((t - 21.6 - i * 0.6) / 1.6) * Math.PI);
+    engrave(g, figure(fx, 120, 110, false), { tone: 0.85, angle: 80, sp: 3.6, w: 1.6, line: 1.2 });
+    engrave(g, SH.rect(fx - 24, 120 - 110 * 0.8 - 30 * carry, 48, 32), { tone: 0.38, angle: 0, sp: 3.6, w: 1.6, line: 1.4, wash: PALETTE.accent, washA: 0.35 });
+  }
+  caption(g, S, 'ŚNIATYŃ · 13.IX.1939', '越过边境', clamp((t - 26.4) / 1.6));
+  plateFrame(g, S);
+}
+
+// ---- Scene 5 (31.17-40): Constanța at dawn. A crane swings the crates aboard; the ship pulls out.
+function gull(g, x, y, t, s = 1) {
+  const f = Math.sin(t * 8 + x) * 0.5;
+  g.save(); g.strokeStyle = INK; g.lineWidth = 2.4 * s; g.lineCap = 'round'; g.beginPath();
+  g.moveTo(x - 22 * s, y - (8 + 10 * f) * s); g.quadraticCurveTo(x - 9 * s, y - (12 + 6 * f) * s, x, y); g.quadraticCurveTo(x + 9 * s, y - (12 + 6 * f) * s, x + 22 * s, y - (8 + 10 * f) * s); g.stroke(); g.restore();
+}
+function ship(g, x, y, t, s = 1) {            // a tanker in profile: raised bow and poop, bridge amidships, one funnel aft
+  g.save(); g.translate(x, y); g.scale(s, s);
+  engrave(g, SH.poly([[-520, -40], [480, -40], [560, -90], [540, 20], [470, 70], [-470, 70], [-540, -10]]), { tone: TN.lit(0, 0, 500, 0.62, 0.18), angle: 0, sp: 5, w: 2.6, line: 2.4 });
+  engrave(g, SH.rect(-520, 20, 1000, 12), { tone: 0.3, angle: 0, sp: 3, w: 1.4, knock: false });
+  engrave(g, SH.rect(-70, -130, 150, 92), { tone: TN.lit(0, -90, 100, 0.4, 0.3), angle: 90, sp: 4.4, w: 2, line: 1.8 });
+  for (let i = 0; i < 4; i++) engrave(g, SH.rect(-58 + i * 34, -118, 22, 20), { tone: 0.9, angle: 90, sp: 3, w: 1.4, line: 1 });
+  engrave(g, SH.rect(-460, -100, 170, 62), { tone: TN.lit(-370, -70, 100, 0.42, 0.3), angle: 90, sp: 4.4, w: 2, line: 1.8 });
+  engrave(g, SH.poly([[-410, -100], [-350, -100], [-356, -190], [-404, -190]]), { tone: TN.lit(-380, -150, 40, 0.5, 0.4), angle: 90, sp: 3.6, w: 1.8, line: 1.6 });
+  engrave(g, SH.rect(380, -260, 8, 220), { tone: 0.7, angle: 90, sp: 2, w: 1.2, line: 1 });
+  engrave(g, SH.rect(20, -280, 8, 150), { tone: 0.7, angle: 90, sp: 2, w: 1.2, line: 1 });
+  g.restore();
+}
+function portDawn(g, k, t, S) {
+  // dolly out, 8.8 s, ease-in-out, from the crane's load to the harbour mouth
+  const cam = { x: lerp(-60, 200, EASE.inOut(k)), y: lerp(-80, 0, EASE.inOut(k)), z: lerp(1.28, 0.98, EASE.inOut(k)) };
+  stage(g, S, cam);
+  camView(g, S, cam, 0.3);
+  engrave(g, SH.rect(-1400, -900, 2800, 1000), { tone: TN.vgrad(-600, 80, 0.36, 0.1), angle: 0, sp: 6.6, w: 2, knock: false, fams: [[0, 0.12, 1, 1]] });   // dawn sky
+  engrave(g, SH.poly([[-1400, 60], [-600, 30], [200, 50], [1400, 40], [1400, 110], [-1400, 110]]), { tone: 0.26, angle: 0, sp: 5, w: 1.6, line: 1 });            // far shore in haze
+  camView(g, S, cam);
+  const sea = SH.rect(-1500, 100, 3000, 800);
+  engrave(g, sea, { tone: (x, y) => 0.3 + 0.25 * clamp((y - 100) / 500) + 0.12 * Math.sin(x * 0.03 + y * 0.2 + t * 1.5), angle: 0, sp: 5.4, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.5 });
+  // the quay and its bollards
+  engrave(g, SH.rect(-1500, 230, 1180, 600), { tone: TN.lit(-900, 400, 600, 0.5, 0.2), angle: 30, sp: 5.4, w: 2.4, line: 2.2 });
+  for (const bx of [-1100, -700]) engrave(g, SH.round(bx, 196, 40, 40, 10), { tone: 0.6, angle: 0, sp: 3, w: 1.6, line: 1.4 });
+  // the ship pulls out after the horn
+  const sx = 260 + Math.max(0, t - CUES.horn) ** 1.6 * 34;
+  ship(g, sx, 180, t, 0.9);
+  for (let i = 0; i < 5; i++) { const ph = (t * 0.5 + i / 5) % 1; engrave(g, SH.circle(sx - 340 - ph * 260, 180 - 190 - ph * 160, 20 + ph * 60), { tone: 0.5 * (1 - ph), angle: 50, sp: 5, w: 1.8, knock: false }); }  // funnel smoke
+  // the crane: tower, jib swinging over the hold, the crate load on its cable
+  const swing = EASE.inOut(clamp((t - CUES.hoist) / 3.2)), lift = Math.sin(clamp((t - CUES.hoist) / 3.4) * Math.PI);
+  engrave(g, SH.poly([[-780, 230], [-700, 230], [-720, -340], [-760, -340]]), { tone: TN.lit(-740, 0, 80, 0.55, 0.3), angle: 90, sp: 4, w: 2, line: 1.8 });
+  for (let i = 0; i < 8; i++) { const yy = 200 - i * 70; g.save(); g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(-772 + i * 1.4, yy); g.lineTo(-708 - i * 1.4, yy - 70); g.stroke(); g.restore(); }
+  const ja = lerp(-0.25, 0.08, swing), L = 760, jx = -740 + Math.cos(ja) * L, jy = -330 + Math.sin(ja) * L * 0.3;
+  g.save(); g.strokeStyle = INK; g.lineWidth = 9; g.beginPath(); g.moveTo(-740, -330); g.lineTo(jx, jy); g.stroke(); g.lineWidth = 2; g.beginPath(); g.moveTo(-740, -420); g.lineTo(jx, jy); g.stroke();
+  const cy = lerp(160, -40, lift) - 40 * swing;
+  g.lineWidth = 2; g.beginPath(); g.moveTo(jx, jy); g.lineTo(jx, cy - 60); g.stroke(); g.restore();
+  engrave(g, SH.rect(jx - 70, cy - 60, 140, 90), { tone: TN.lit(jx, cy, 90, 0.38, 0.3), angle: 0, sp: 4.4, w: 2, line: 2 });
+  engrave(g, SH.rect(jx - 60, cy - 30, 120, 6), { tone: 0.2, knock: false, wash: PALETTE.accent, washA: 0.5 });
+  for (let i = 0; i < 4; i++) gull(g, -200 + i * 230 + Math.sin(t * 0.7 + i) * 60, -300 + i * 30 + Math.cos(t * 0.9 + i) * 30, t, 1.2);
+  caption(g, S, 'CONSTANȚA', '康斯坦察', clamp((t - CUES.port - 0.5) / 1.6), { x: 1824, align: 'right' });
+  plateFrame(g, S);
+}
+
+// ---- Scene 8 (56.05-60): the open sea at dusk. The ship far out, one gold glint; the title is cut.
+function seaGlint(g, k, t, S) {
+  // dolly out, 3.95 s, slow ease-out, on the horizon; the title cut glyph by glyph above it
+  const cam = { x: 0, y: 0, z: lerp(1.12, 1, EASE.out(k)) };
+  stage(g, S, cam);
+  engrave(g, SH.rect(-1300, -800, 2600, 880), { tone: TN.vgrad(-560, 70, 0.6, 0.16, 0.03), angle: 0, sp: 6.2, w: 2.4, knock: false });   // dusk sky
+  engrave(g, SH.circle(-520, 60, 64), { tone: 0.03, knock: '#fbf1d6', line: 1 });
+  const sea = SH.rect(-1300, 70, 2600, 800);
+  engrave(g, sea, { tone: (x, y) => 0.36 + 0.36 * clamp((y - 70) / 450) - 0.3 * Math.max(0, 1 - Math.abs(x + 520) / 160) * clamp(1 - (y - 70) / 300) + 0.1 * Math.sin(x * 0.02 + y * 0.35 - t * 2), angle: 0, sp: 5.2, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.45 });
+  const sx = 330 + (t - CUES.sea) * 14;
+  ship(g, sx, 52, t, 0.14);
+  for (let i = 0; i < 4; i++) engrave(g, SH.circle(sx - 60 - i * 26, 22 - i * 8, 6 + i * 4), { tone: 0.4 - i * 0.08, angle: 40, sp: 3, w: 1, knock: false });
+  const gk = clamp((t - CUES.sea - 0.6) / 0.5), gw = gk * (0.75 + 0.25 * Math.sin(t * 5));   // one gold glint at the ship
+  if (gk > 0) { engrave(g, SH.circle(sx + 10, 44, 7 * gw + 2), { tone: 0.15, knock: '#fff4cf', wash: PALETTE.accent, washA: 0.95, line: 1 }); burst(g, sx + 10, 44, 0.35 + 0.1 * Math.sin(t * 3), 10, 52, 8, 2.2 * gw); }
+  cutText(g, S, TITLE, DW / 2, 380, 150, clamp((t - 57.0) / 1.4), { role: 'display', align: 'center', track: 0.3 });
+  plateFrame(g, S);
+}
+
+function score(ctx, out) {}                 // the music is the recording (OWN_MUSIC)
+
+// ============================== HELPERS (picture) ==============================
+const q = new URLSearchParams(location.search);
+const W = +q.get('w') || 1080, H = +q.get('h') || 1920, SEED = +q.get('seed') || 7;
+const FRAMES = Math.round(FPS * DURATION), TAU = Math.PI * 2, SR = 48000;
+const canvas = document.getElementById('c');
+canvas.width = W; canvas.height = H;
+const g = canvas.getContext('2d', { alpha: false });
+const S = { W, H, u: Math.min(W, H) };       // u = the short side; sizes below are fractions of it
+
+function rng(salt) {                         // seeded PRNG (mulberry32); call rng(salt) inside draw for a fresh, fixed stream
+  let a = (SEED * 2654435761 + salt * 974711) >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function hash1(n) { const s = Math.sin(n * 127.1 + SEED * 311.7) * 43758.5453; return s - Math.floor(s); }
+function noise1(x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return hash1(i) * (1 - u) + hash1(i + 1) * u; }
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+// Easing names used in camera lines: linear, ease-in, ease-out, ease-in-out, inertia (keeps speed at both ends).
+const EASE = {
+  linear: (k) => k, in: (k) => k * k * k, out: (k) => 1 - (1 - k) ** 3,
+  inOut: (k) => k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2,
+  inertia: (k) => 0.35 * k + 0.65 * k * k * (3 - 2 * k),
+};
+// Motion for things in the frame (KIT/references/motion.md): entrances ease out, exits ease in, nothing living moves linearly.
+const MOTION = {
+  at: (t, start, dur) => clamp((t - start) / dur),                       // 0..1 progress; a follower uses at(t - lag, ...)
+  back: (k, s = 1.7) => 1 + (s + 1) * (k - 1) ** 3 + s * (k - 1) ** 2,    // ease-out with overshoot: s 1 ≈ 4%, 1.7 ≈ 10%, 2.2 ≈ 15%
+  anticipate: (k, amount = 0.15, share = 0.25) => k < share             // wind back by `amount`, then release
+    ? -amount * (1 - Math.cos(Math.PI * k / share)) / 2
+    : -amount + (1 + amount) * (1 - (1 - (k - share) / (1 - share)) ** 3),
+  spring: (tau, zeta = 0.7, f = 2) => {                                  // damped spring tau s after release; zeta 1 firm, 0.7 ≈ 5%, 0.5 ≈ 16%, 0.4 ≈ 25%
+    if (tau <= 0) return 0;
+    const w = 2 * Math.PI * f;
+    if (zeta >= 1) return 1 - Math.exp(-w * tau) * (1 + w * tau);
+    const wd = w * Math.sqrt(1 - zeta * zeta);
+    return 1 - Math.exp(-zeta * w * tau) * (Math.cos(wd * tau) + zeta * w / wd * Math.sin(wd * tau));
+  },
+  stagger: (i, n, spread, order = 'seq') => {                            // start delay of item i of n: seq, reverse, center, random (seeded)
+    if (n < 2) return 0;
+    const u = i / (n - 1);
+    const p = order === 'reverse' ? 1 - u : order === 'center' ? Math.abs(2 * u - 1) : order === 'random' ? hash1(i + 0.5) : u;
+    return p * spread;
+  },
+  arc: (k, ax, ay, bx, by, bend = 0.15) => {                             // point on a bowed path from a to b (living things move on arcs)
+    const dx = bx - ax, dy = by - ay, o = bend * Math.sin(Math.PI * k);
+    return [ax + dx * k - dy * o, ay + dy * k + dx * o];
+  },
+};
+
+// ---- Camera (2.5D). Coordinates: (0,0) is the centre, 1 = the short side; y grows downward.
+// The world is a stack of flat planes; z = depth behind the subject plane (z = 0), negative = in front of it.
+// The camera sits `dist` in front of plane 0; a plane's scale is focal / (dist + z), so moving the camera gives
+// real parallax and changing `focal` does not (a zoom). Every move takes an eased value e in 0..1.
+const CAM = {
+  base: () => ({ x: 0, y: 0, dist: 1, focal: 1, pan: 0, tilt: 0, roll: 0, focusZ: 0, aperture: 0 }),
+  pan: (c, e, a, b) => { c.pan += lerp(a, b, e); },           // turn: screen shift, no parallax (+ = right)
+  tilt: (c, e, a, b) => { c.tilt += lerp(a, b, e); },         // + = up
+  dolly: (c, e, a, b) => { c.dist = lerp(a, b, e); },         // dolly in: b < a
+  zoom: (c, e, a, b) => { c.focal = lerp(a, b, e); },         // zoom in: b > a (no parallax)
+  truck: (c, e, a, b) => { c.x = lerp(a, b, e); },            // tracking / truck: camera moves sideways (+ = right)
+  crane: (c, e, a, b) => { c.y = -lerp(a, b, e); },           // crane / pedestal: + = up
+  orbit: (c, e, a, b, targetZ = 0) => {                       // arc around a target plane, degrees
+    const ang = lerp(a, b, e) * Math.PI / 180, R = c.dist + targetZ;
+    c.x = Math.sin(ang) * R; c.pan -= c.x * c.focal / R;      // turn back toward the target: near and far planes slide
+  },
+  dollyZoom: (c, e, a, b, subjectZ = 0) => {                  // vertigo: dist changes, focal compensates
+    const f0 = c.focal; c.dist = lerp(a, b, e); c.focal = f0 * (c.dist + subjectZ) / (a + subjectZ);
+  },
+  pushTo: (c, e, x, y, a, b) => { c.dist = lerp(a, b, e); c.x = x * e; c.y = y * e; },   // push-in on a detail at (x, y)
+  fpv: (c, e, a, b, bank = 0.15) => { c.dist = lerp(a, b, e); c.roll += bank * Math.sin(Math.PI * e); },   // fly through planes
+  handheld: (c, t, amount = 1, salt = 3) => {                 // seeded, low-passed (0.3-1.1 Hz); never per-frame jitter
+    const n = (f, o) => 2 * noise1(t * f + salt + o) - 1;
+    c.pan += amount * (0.004 * n(1.1, 0) + 0.003 * n(0.3, 40));
+    c.tilt += amount * (0.004 * n(1.0, 20) + 0.003 * n(0.27, 60));
+    c.roll += amount * 0.003 * n(0.8, 80);
+  },
+  matchFrom: (c, e, dx, dy) => { c.x += dx * (1 - e); c.y += dy * (1 - e); },   // match cut: start where A's shape was, settle
+  rackFocus: (c, e, a, b, aperture = 1) => { c.focusZ = lerp(a, b, e); c.aperture = aperture; },
+  // One continuous shot: a fresh camera on the path through `keys` ([{ t, x, y, dist, focal, pan, tilt, roll }], a
+  // missing value keeps the previous key's) at time t. Hermite curves with tangents from the neighbours, so the camera
+  // flows through every key and never stops on one; it eases only out of the first key and into the last.
+  path: (keys, t) => {
+    const K = [];
+    let prev = CAM.base();
+    for (const k of keys) { prev = { ...prev, ...k }; K.push(prev); }
+    const F = Object.keys(K[K.length - 1]).filter((f) => f !== 't' && typeof K[K.length - 1][f] === 'number');
+    const c = CAM.base(), n = K.length;
+    const at = (k) => { for (const f of F) c[f] = k[f]; return c; };
+    if (n === 1 || t <= K[0].t) return at(K[0]);
+    if (t >= K[n - 1].t) return at(K[n - 1]);
+    let i = 0;
+    while (t > K[i + 1].t) i++;
+    const dt = K[i + 1].t - K[i].t, u = (t - K[i].t) / dt, u2 = u * u, u3 = u2 * u;
+    const m = (j, f) => (j <= 0 || j >= n - 1) ? 0 : (K[j + 1][f] - K[j - 1][f]) / (K[j + 1].t - K[j - 1].t);
+    for (const f of F) {
+      c[f] = (2 * u3 - 3 * u2 + 1) * K[i][f] + (u3 - 2 * u2 + u) * dt * m(i, f)
+        + (-2 * u3 + 3 * u2) * K[i + 1][f] + (u3 - u2) * dt * m(i + 1, f);
+    }
+    return c;
+  },
+  // An operator following a moving subject: the camera's x and y trail the subject's position lag seconds behind
+  // (pos(t) returns [x, y] in world units), so it reads as a camera chasing, not a lock. k blends it into the path.
+  follow: (c, pos, t, lag = 0.35, k = 1, offset = [0, 0]) => {
+    const [x, y] = pos(t - lag);
+    c.x = lerp(c.x, x + offset[0], k); c.y = lerp(c.y, y + offset[1], k);
+  },
+};
+
+// Perspective: a camera standing in a 3D world (y up) at (x, y, z), looking at (tx, ty, tz), with a vertical field of
+// view in degrees. For anything seen along or around: a road or track receding, a vehicle at three quarters, an orbit
+// around a product, a flight through a place. Hand-drawn things stay hand-drawn: view.sprite() places a 2D drawing at a
+// 3D point at its true size and depth, view.poly() and view.line() draw ground shapes and objects in perspective, and
+// view.haze() fades what is far into the air (aerial perspective: the far is paler and softer, the near darkest).
+// Keys for a moving view go through CAM.path like any camera: { t, x, y, z, tx, ty, tz, fov }.
+const VIEW = {
+  of(c, S) {
+    const e = [c.x, c.y, c.z ?? 0], f0 = [(c.tx ?? 0) - e[0], (c.ty ?? 0) - e[1], (c.tz ?? 0) - e[2]];
+    const n = (v) => { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); };
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const f = n(f0); let r = n(cross(f, [0, 1, 0])), u = cross(r, f);
+    if (c.roll) { const cs = Math.cos(c.roll), sn = Math.sin(c.roll); [r, u] = [r.map((x, i) => x * cs + u[i] * sn), u.map((x, i) => x * cs - r[i] * sn)]; }
+    const k = (S.H / 2) / Math.tan((c.fov ?? 50) * Math.PI / 360), dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return {
+      // [screen x, screen y, scale (px per world unit at that depth), depth], or null behind the camera
+      p(x, y, z) {
+        const d = [x - e[0], y - e[1], z - e[2]], zc = dot(d, f);
+        return zc > 0.05 ? [S.W / 2 + dot(d, r) * k / zc, S.H / 2 - dot(d, u) * k / zc, k / zc, zc] : null;
+      },
+      // a 2D drawing (fn draws in its own units, 1 = size world units) standing at (x, y, z)
+      sprite(g, x, y, z, size, fn) {
+        const q = this.p(x, y, z);
+        if (!q) return false;
+        g.save(); g.translate(q[0], q[1]); g.scale(q[2] * size, q[2] * size); fn(g, q[3]); g.restore();
+        return true;
+      },
+      poly(g, pts, fill, stroke, width = 1) {
+        const q = pts.map((p) => this.p(...p));
+        if (q.some((v) => !v)) return false;
+        g.beginPath(); q.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b))); g.closePath();
+        if (fill) { g.fillStyle = fill; g.fill(); }
+        if (stroke) { g.strokeStyle = stroke; g.lineWidth = width; g.stroke(); }
+        return true;
+      },
+      line(g, pts, color, width = 1) {
+        const q = pts.map((p) => this.p(...p)).filter(Boolean);
+        if (q.length < 2) return false;
+        g.beginPath(); q.forEach(([a, b], i) => (i ? g.lineTo(a, b) : g.moveTo(a, b)));
+        g.strokeStyle = color; g.lineWidth = width; g.stroke();
+        return true;
+      },
+      // draw things far to near: items [{ at: [x, y, z], draw(g, view, depth) }]
+      sorted(g, items) {
+        items.map((it) => ({ it, q: this.p(...it.at) })).filter((o) => o.q).sort((a, b) => b.q[3] - a.q[3])
+          .forEach(({ it, q }) => it.draw(g, this, q[3]));
+      },
+      // 0 near .. 1 lost in the air, for a depth: mix a thing's colour toward the air's colour by it
+      haze: (depth, near = 2, far = 40) => clamp((depth - near) / (far - near)),
+    };
+  },
+};
+
+// Speed ramp / slow motion / time-lapse / freeze frame: remap film time. keys = [[t, speed], ...], speed linear
+// between keys (1 = real time, 0.25 = slow motion, 8 = time-lapse, 0 = freeze). Use the result as the scene's t.
+function retime(t, keys) {
+  let acc = 0, pt = 0, ps = keys[0][1];
+  for (const [kt, ks] of keys) {
+    if (kt > pt) {
+      if (t <= kt) { const s = ps + (ks - ps) * (t - pt) / (kt - pt); return acc + (t - pt) * (ps + s) / 2; }
+      acc += (kt - pt) * (ps + ks) / 2;
+    }
+    pt = kt; ps = ks;
+  }
+  return acc + (t - pt) * ps;
+}
+
+// Draw one depth plane through the camera. Planes behind the camera are skipped; out-of-focus planes are drawn
+// into a scratch layer and blurred once (rack focus / focus pull).
+let scratch = null;
+function plane(g, S, c, z, fn) {
+  const depth = c.dist + z;
+  if (depth <= 0.05) return false;
+  const s = c.focal / depth * S.u, sf = c.focal / Math.max(0.05, c.dist + c.focusZ) * S.u;
+  const blur = c.aperture * 12 * Math.abs(s - sf) / sf * (S.u / 1080);
+  const setView = (ctx) => {
+    ctx.setTransform(1, 0, 0, 1, S.W / 2, S.H / 2); ctx.rotate(c.roll);
+    ctx.translate(-c.pan * S.u, c.tilt * S.u); ctx.scale(s, s); ctx.translate(-c.x, -c.y);
+  };
+  if (blur < 0.3) { g.save(); setView(g); fn(g); g.restore(); return true; }
+  scratch ??= Object.assign(document.createElement('canvas'), { width: S.W, height: S.H });
+  const l = scratch.getContext('2d');
+  l.setTransform(1, 0, 0, 1, 0, 0); l.clearRect(0, 0, S.W, S.H); l.save(); setView(l); fn(l); l.restore();
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.filter = `blur(${blur.toFixed(2)}px)`; g.drawImage(scratch, 0, 0); g.restore();
+  return true;
+}
+
+// Transitions between two rendered scenes A (outgoing) and B (incoming); k = 0..1 across the transition window.
+// cut / smash / match need no window (a hard cut on the scene's start; smash = a hard cut between contrasting
+// scenes and sounds; match = a hard cut where B's shape starts where A's was, see CAM.matchFrom).
+const TRANSITION = {
+  dissolve(g, A, B, k) { g.drawImage(A, 0, 0); g.globalAlpha = EASE.inOut(k); g.drawImage(B, 0, 0); g.globalAlpha = 1; },
+  wipe(g, A, B, k, o) {
+    const w = EASE.inOut(k) * W, d = o.dir ?? 1;
+    g.drawImage(A, 0, 0); g.save(); g.beginPath(); d > 0 ? g.rect(0, 0, w, H) : g.rect(W - w, 0, w, H); g.clip();
+    g.drawImage(B, 0, 0); g.restore();
+  },
+  whip(g, A, B, k, o) {                                       // whip pan: A streaks out, B streaks in (dir 1 = pan right)
+    const d = o.dir ?? 1, e = EASE.inOut(k), streak = W * 0.35 * Math.sin(Math.PI * k), N = 8;
+    g.globalAlpha = 1; g.fillStyle = PALETTE.bg; g.fillRect(0, 0, W, H);   // the strip A leaves must not keep the last frame
+    for (let i = 0; i < N; i++) {                             // running average of N offset copies = motion blur
+      const off = e * W + (i / (N - 1) - 0.5) * streak;
+      g.globalAlpha = 1 / (i + 1); g.drawImage(A, -d * off, 0); g.drawImage(B, d * (W - off), 0);
+    }
+    g.globalAlpha = 1;
+  },
+  iris(g, A, B, k, o) {                                       // B opens inside a shape on a point: at = [x, y] shares
+    const [ax, ay] = o.at ?? [0.5, 0.5], cx = ax * W, cy = ay * H;
+    const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)), r = far * EASE.inOut(k);
+    g.drawImage(A, 0, 0); g.save(); g.beginPath();
+    if (o.shape) o.shape(g, cx, cy, r); else g.arc(cx, cy, Math.max(0.01, r), 0, TAU);
+    g.clip(); g.drawImage(B, 0, 0); g.restore();
+  },
+};
+// Shape morph: one closed shape becomes another. Both outlines are
+// resampled to n points by length and aligned so the start points match before blending; k from MOTION or EASE.
+const poly = {
+  circle: (cx, cy, r, n = 96) => Array.from({ length: n }, (_, i) => [cx + r * Math.cos(TAU * i / n - Math.PI / 2), cy + r * Math.sin(TAU * i / n - Math.PI / 2)]),
+  rect: (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]],
+  star: (cx, cy, r, points = 5, inner = 0.45) => Array.from({ length: points * 2 }, (_, i) => {
+    const a = Math.PI * i / points - Math.PI / 2, rr = i % 2 ? r * inner : r; return [cx + rr * Math.cos(a), cy + rr * Math.sin(a)]; }),
+};
+function resampleShape(pts, n) {
+  const seg = pts.map((p, i) => Math.hypot(pts[(i + 1) % pts.length][0] - p[0], pts[(i + 1) % pts.length][1] - p[1]));
+  const total = seg.reduce((a, b) => a + b, 0), out = [];
+  for (let j = 0, i = 0, acc = 0; j < n; j++) {
+    const d = total * j / n;
+    while (acc + seg[i] < d && i < pts.length - 1) acc += seg[i++];
+    const u = seg[i] ? (d - acc) / seg[i] : 0, p = pts[i], q = pts[(i + 1) % pts.length];
+    out.push([p[0] + (q[0] - p[0]) * u, p[1] + (q[1] - p[1]) * u]);
+  }
+  return out;
+}
+const morphPairs = new Map();
+function morphShape(A, B, k, n = 96) {
+  const key = `${n}|${A.join(';')}|${B.join(';')}`;           // every point: two shapes never share an alignment
+  if (morphPairs.size > 256) morphPairs.clear();              // shapes that change per frame: the cache stays small
+  if (!morphPairs.has(key)) {                                 // the alignment depends only on A, B, n: frames stay pure
+    const a = resampleShape(A, n), b = resampleShape(B, n);
+    let best = 0, bestD = Infinity;
+    for (let s = 0; s < n; s++) {
+      let d = 0; for (let i = 0; i < n; i += 4) { const q = b[(i + s) % n]; d += (a[i][0] - q[0]) ** 2 + (a[i][1] - q[1]) ** 2; }
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    morphPairs.set(key, [a, b.map((_, i) => b[(i + best) % n])]);
+  }
+  const [a, b] = morphPairs.get(key);
+  return a.map((p, i) => [p[0] + (b[i][0] - p[0]) * k, p[1] + (b[i][1] - p[1]) * k]);
+}
+function fillShape(g, pts, color, alpha = 1) {
+  g.globalAlpha = alpha; g.fillStyle = color; g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.closePath(); g.fill(); g.globalAlpha = 1;
+}
+// Light sweep: a soft band of light crosses a surface (a product, a card, a title) once, k 0 -> 1. clip(g) draws the
+// surface's path; angle in degrees from vertical; width as a share of the surface; strength 0-1.
+function lightSweep(g, x, y, w, h, k, o = {}) {
+  if (k <= 0 || k >= 1) return;
+  const ang = ((o.angle ?? 20) * Math.PI) / 180, band = (o.width ?? 0.25) * w, travel = w + band * 2 + h * Math.tan(ang);
+  const cx = x - band + EASE.inOut(k) * travel;
+  g.save(); g.beginPath(); if (o.clip) o.clip(g); else g.rect(x, y, w, h); g.clip();
+  g.globalCompositeOperation = 'lighter'; g.translate(cx, y + h / 2); g.rotate(ang);
+  const gr = g.createLinearGradient(-band / 2, 0, band / 2, 0), c = o.color ?? '255,248,235', a = o.strength ?? 0.55;
+  gr.addColorStop(0, `rgba(${c},0)`); gr.addColorStop(0.5, `rgba(${c},${a})`); gr.addColorStop(1, `rgba(${c},0)`);
+  g.fillStyle = gr; g.fillRect(-band / 2, -h * 2, band, h * 4); g.restore();
+}
+function dot(g, S, x, y, r, color, alpha = 1) { g.globalAlpha = alpha; g.fillStyle = color; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); g.globalAlpha = 1; }
+function circle(g, S, x, y, r, color, width) { g.strokeStyle = color; g.lineWidth = width; g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke(); }
+// World-space type on a plane (titles): the display role unless o.role says otherwise. tracking: share of the em, or
+// null for tracking by size. o: { role, weight (any value on a variable wght axis, e.g. breathe(t, BPM, 500, 800)),
+// axes ({ SOFT: 60 } -> nearest stop), caps (Turkish-aware up()), reveal (0..1: units rise in through masks), by
+// ('char' | 'word'), spread, order }. KIT/references/typography.md §6-7.
+function text(g, S, str, x, y, size, color, alpha = 1, tracking = null, o = {}) {
+  g.save(); g.scale(0.01, 0.01);              // fonts render badly below 1px, so draw at 100x and scale down
+  g.globalAlpha = alpha; g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const s = o.caps ? up(str, TYPE.lang) : str;
+  setType(g, TYPE, o.role || 'display', size * 100, { short: 200, weight: o.weight ?? 700, axes: o.axes, caps: o.caps, ...(tracking == null ? {} : { track: tracking }) });
+  const yb = y * 100 + headroom(g).cap / 2;   // x, y = the centre of the cap height
+  if (o.reveal != null) typeReveal(g, s, x * 100, yb, o.reveal, { by: o.by, spread: o.spread, order: o.order, ease: EASE.out });
+  else g.fillText(s, x * 100, yb);
+  g.restore();
+}
+// On-screen name (a place, landmark, product, person): a lower third in screen space, unmoved by the camera, in the
+// film's text role. The box is measured from the font and the string's own ink, so diacritics and ascenders keep their
+// headroom (test with 'İĞÜŞÖÇ ÉÅ Ñ'). x, y = the text's left baseline; align 'left' | 'center'.
+function label(g, S, str, x, y, size, color, bg = null, alpha = 1, align = 'left', role = 'text') {
+  if (alpha <= 0) return;
+  g.save(); g.setTransform(S.u / 100, 0, 0, S.u / 100, S.W / 2, S.H / 2);
+  g.globalAlpha = alpha; setType(g, TYPE, role, size * 100, { short: 100, weight: 600 }); g.textAlign = align; g.textBaseline = 'alphabetic';
+  const m = g.measureText(str), pad = size * 100 * 0.4, X = x * 100, Y = y * 100;
+  const above = Math.max(m.actualBoundingBoxAscent, m.fontBoundingBoxAscent || 0, headroom(g).above);
+  const down = Math.max(m.actualBoundingBoxDescent, m.fontBoundingBoxDescent || 0);
+  const left = align === 'center' ? X - m.width / 2 : X;
+  if (bg) { g.fillStyle = bg; g.fillRect(left - pad, Y - above - pad, m.width + 2 * pad, above + down + 2 * pad); }
+  g.fillStyle = color; g.fillText(str, X, Y); g.restore();
+}
+// Seeded data made once and reused by every frame (a star field, a layout): const stars = lazy(() => { const r = rng(3);
+// return Array.from({ length: 200 }, () => [r(), r()]); }); then call stars() inside a draw function.
+function lazy(make) { let value; return () => (value ??= make()); }
+function flash(g, S, a) { if (a <= 0) return; g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = a; g.fillStyle = '#fff'; g.fillRect(0, 0, S.W, S.H); g.restore(); }
+function grain(g, S, frame, amount = 0.05) {     // seeded per frame, so re-renders are identical
+  if (amount <= 0) return;
+  const r = rng(1000 + frame); g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
+  for (let i = 0; i < 1400; i++) { g.globalAlpha = amount * r(); g.fillStyle = r() < 0.5 ? '#000' : '#fff';
+    g.fillRect(r() * S.W, r() * S.H, 2, 2); }
+  g.restore();
+}
+// Look helpers. shade(hex, light): the colour under a light value (0 shadow, 0.5 the colour itself, 1 lit), banded into
+// LOOK.steps for toon looks. inkLine(g, S): strokes the current path with the look's outline (no-op when line is 0),
+// the same width on screen inside a plane() or outside it.
+function shade(hex, light) {
+  let l = clamp(light);
+  if (LOOK.steps > 1) l = Math.round(l * (LOOK.steps - 1)) / (LOOK.steps - 1);
+  const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255];
+  const m = l < 0.5 ? c.map((v) => v * (0.45 + 1.1 * l)) : c.map((v) => v + (255 - v) * (l - 0.5) * 0.9);
+  return `rgb(${m.map((v) => Math.round(clamp(v, 0, 255))).join(',')})`;
+}
+function inkLine(g, S, color = PALETTE.ink) {
+  if (!LOOK.line) return;
+  const m = g.getTransform(), scale = Math.hypot(m.a, m.b) || 1;
+  g.save(); g.lineWidth = LOOK.line * S.u / scale; g.strokeStyle = color; g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke(); g.restore();
+}
+const lookTextures = {
+  paper: lazy(() => {                            // warm fibre, made once at half size, laid on with multiply
+    const c = Object.assign(document.createElement('canvas'), { width: Math.ceil(S.W / 2), height: Math.ceil(S.H / 2) });
+    const x = c.getContext('2d'), r = rng(77);
+    x.fillStyle = '#fbf6ec'; x.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < c.width * c.height / 40; i++) {
+      x.globalAlpha = 0.05 + 0.1 * r(); x.strokeStyle = r() < 0.5 ? '#c9b99a' : '#fffaf0'; x.lineWidth = 0.5 + r();
+      const px = r() * c.width, py = r() * c.height, a = r() * TAU, len = 2 + 8 * r();
+      x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.cos(a) * len, py + Math.sin(a) * len); x.stroke();
+    }
+    return { c, op: 'multiply', alpha: 0.55 };
+  }),
+  scanlines: lazy(() => {
+    const step = Math.max(2, Math.round(3 * S.u / 1080));
+    const c = Object.assign(document.createElement('canvas'), { width: 1, height: step });
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 1, step); x.fillStyle = '#000'; x.fillRect(0, 0, 1, 1);
+    return { pattern: true, c, op: 'multiply', alpha: 0.18 };
+  }),
+  halftone: lazy(() => {
+    const cell = Math.max(4, Math.round(S.u / 180));
+    const c = Object.assign(document.createElement('canvas'), { width: cell, height: cell });
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cell, cell);
+    x.fillStyle = '#000'; x.beginPath(); x.arc(cell / 2, cell / 2, cell * 0.28, 0, TAU); x.fill();
+    return { pattern: true, c, op: 'multiply', alpha: 0.14 };
+  }),
+};
+function lookTexture(g, S) {
+  const tex = LOOK.texture && lookTextures[LOOK.texture]?.();
+  if (!tex) return;
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = tex.op; g.globalAlpha = tex.alpha;
+  if (tex.pattern) { g.fillStyle = g.createPattern(tex.c, 'repeat'); g.fillRect(0, 0, S.W, S.H); }
+  else g.drawImage(tex.c, 0, 0, S.W, S.H);
+  g.restore();
+}
+function vignette(g, S, k) {
+  if (!k) return;
+  const r = Math.hypot(S.W, S.H) / 2, v = g.createRadialGradient(S.W / 2, S.H / 2, r * 0.45, S.W / 2, S.H / 2, r);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${k})`);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = v; g.fillRect(0, 0, S.W, S.H); g.restore();
+}
+// ---- TYPE RUNTIME: the same code as KIT/starter/type.mjs (keep them in step) ----
+// Typography runtime: the TYPE block -> FontFace (pinned Fontsource CDN or local fonts/), type set in Canvas 2D by role,
+// type motion (stagger, masks, baseline shifts, axis breathing) and a type check (glyphs, phone size, contrast, line
+// length). Same code in film.html (inline), starter/type.mjs and the type specimen. KIT/references/typography.md.
+//
+// TYPE = { lang: 'tr', roles: { display: ROLE, text: ROLE, mono: ROLE | null } }
+// ROLE (Fontsource, numbers from references/type-library.json):
+//   { family: 'Fraunces', pkg: 'fraunces', version: '5.3.0', weights: [400, 700] }                  static cuts
+//   { family: 'Fraunces', pkg: 'fraunces', version: '5.3.0', variable: 'full',                      variable file
+//     axes: { wght: [100, 900], opsz: [9, 144], SOFT: [0, 100], WONK: [0, 1] },
+//     stops: [{ SOFT: 0 }, { SOFT: 50 }, { SOFT: 100, WONK: 1 }],    faces for non-weight axes (Canvas has no axis API)
+//     features: '"ss01", "tnum"', cap: 0.7 }    OpenType features for every face of this role; cap = cap height / em (library metrics)
+// ROLE (local, brand or Fontshare fonts; fonts/ stays out of git):
+//   { family: 'Brand Sans', files: { 400: 'fonts/brand/BrandSans-Regular.woff2', 700: 'fonts/brand/BrandSans-Bold.woff2' } }
+//   { family: 'Basteleur', files: { var: 'fonts/basteleur/Basteleur-Moonlight.woff2' }, axes: { wght: [200, 700] } }
+// styles: default ['normal']; ['normal', 'italic'] also loads the italic files (Fontsource names them -italic).
+// subsets: default ['latin', 'latin-ext'] (İ Ğ ğ Ş ş live in latin-ext, ı in latin). A font whose library entry has
+// one subset ships one file that already carries Turkish: set subsets: ['latin'] and it loads without a unicode range.
+
+const TYPE_SUBSETS = {
+  latin: 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD',
+  'latin-ext': 'U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF',
+};
+const TYPE_FALLBACK = { display: 'ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif',
+  text: 'ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif', mono: 'ui-monospace, Menlo, monospace' };
+const TYPE_TR_TEST = 'İıĞğŞşÇçÖöÜü';
+const STRETCH = [[50, 'ultra-condensed'], [62.5, 'extra-condensed'], [75, 'condensed'], [87.5, 'semi-condensed'], [100, 'normal'],
+  [112.5, 'semi-expanded'], [125, 'expanded'], [150, 'extra-expanded'], [200, 'ultra-expanded']];
+
+const stopKey = (stop) => Object.entries(stop).map(([k, v]) => `${k}${v}`).join(',');
+const typeRole = (T, name) => (T && T.roles && T.roles[name]) || null;
+
+function roleFaces(r) {                       // every FontFace one role needs: subsets × cuts × axis stops
+  const subs = r.subsets || ['latin', 'latin-ext'], ranged = subs.length > 1, out = [];
+  for (const style of r.styles || ['normal']) {
+  const base = { style };
+  if (r.features) base.featureSettings = r.features;
+  const variants = [{ name: r.family, extra: {} }, ...(r.stops || []).map((s) => ({ name: `${r.family}~${stopKey(s)}`,
+    extra: { variationSettings: Object.entries(s).map(([k, v]) => `"${k}" ${v}`).join(', ') } }))];
+  const wr = r.axes?.wght ? `${r.axes.wght[0]} ${r.axes.wght[1]}` : '100 900';
+  const sr = r.axes?.wdth ? `${r.axes.wdth[0]}% ${r.axes.wdth[1]}%` : undefined;
+  for (const v of variants) {
+    if (r.files) {
+      for (const [w, url] of Object.entries(r.files))
+        out.push([v.name, url, { ...base, ...v.extra, weight: w === 'var' ? wr : String(w), ...(w === 'var' && sr ? { stretch: sr } : {}) }]);
+      continue;
+    }
+    for (const sub of subs) {
+      const range = ranged ? { unicodeRange: TYPE_SUBSETS[sub] } : {};
+      if (r.variable) {
+        const url = `https://cdn.jsdelivr.net/npm/@fontsource-variable/${r.pkg}@${r.varVersion || r.version}/files/${r.pkg}-${sub}-${r.variable}-${style}.woff2`;
+        out.push([v.name, url, { ...base, ...range, ...v.extra, weight: wr, ...(sr ? { stretch: sr } : {}) }]);
+      } else for (const w of r.weights || [400]) {
+        const url = `https://cdn.jsdelivr.net/npm/@fontsource/${r.pkg}@${r.version}/files/${r.pkg}-${sub}-${w}-${style}.woff2`;
+        out.push([v.name, url, { ...base, ...range, ...v.extra, weight: String(w) }]);
+      }
+    }
+  }
+  }
+  return out;
+}
+
+// Loads every role; any face that fails stops the render (a silent fallback font would change the film's type).
+// ---- Characters (KIT/references/characters.md): a stylised rig, never a realistic person. CAST in the FILM section
+// names each actor's design; character() draws one at a time t with a view, an emotion and an action.
+// Bean body, rubber-hose limbs with mitt hands, a round head; every part a pure function of t (blinks and boil seeded).
+const EMOTIONS = {   // brow (+ worried, - cross), browY lift, eye openness, pupil size, mouth, head tilt, shoulders, lean, extras
+  neutral: { brow: 0, eye: 1, mouth: 'flat' },
+  happy: { brow: 0.15, eye: 0.95, mouth: 'smile' },
+  laugh: { brow: 0.2, eye: 0, mouth: 'grin', tilt: -0.1, bounce: 1 },
+  sad: { brow: 0.55, eye: 0.7, mouth: 'frown', tilt: 0.12, sh: -0.6, look: [0, 0.35] },
+  cry: { brow: 0.65, eye: 0.45, mouth: 'wobble', tilt: 0.1, sh: -0.8, tears: 1 },
+  angry: { brow: -0.6, eye: 0.85, mouth: 'frown', lean: 0.06, sh: 0.3 },
+  surprised: { brow: 0.25, browY: 0.12, eye: 1.25, pupil: 0.7, mouth: 'o' },
+  scared: { brow: 0.5, browY: 0.08, eye: 1.2, pupil: 0.6, mouth: 'wobble', sh: 0.6, sweat: 1, lean: -0.05 },
+  proud: { brow: -0.05, eye: 0.7, mouth: 'smirk', tilt: -0.12, lean: -0.05 },
+  shy: { brow: 0.3, eye: 0.8, mouth: 'small', tilt: 0.14, blush: 1, look: [0.3, 0.4], sh: 0.2 },
+  thinking: { brow: 0.2, browAsym: 0.25, eye: 0.9, mouth: 'side', tilt: 0.08, look: [0.4, -0.45] },
+  tired: { brow: 0.2, eye: 0.4, mouth: 'flat', sh: -0.5, lean: 0.06, tilt: 0.06 },
+  determined: { brow: -0.35, eye: 0.85, mouth: 'tight', lean: 0.07 },
+  love: { brow: 0.2, eye: 0.85, mouth: 'smile', blush: 1, tilt: -0.08 },
+  disgusted: { brow: -0.25, browAsym: -0.2, eye: 0.65, mouth: 'side', tilt: -0.06, lean: -0.06 },
+  confused: { brow: 0.1, browAsym: 0.35, eye: 1, mouth: 'wobble', tilt: 0.16 },
+};
+// One action's joint angles at progress p (seconds for cycles, 0..1 for jump): limb angles from hanging straight down,
+// + forward; elbows and knees bend; bob lifts the body; sq squashes (1 = none).
+function actionPose(action, p) {
+  const s = Math.sin, P = { la: 0.12, le: 0.15, ra: -0.12, re: 0.15, lh: 0, lk: 0, rh: 0, rk: 0, bob: 0, sq: 1, lean: 0, nod: 0, turn: 0, raise: [0, 0] };
+  const cyc = (len) => TAU * p / len;
+  if (action === 'idle') { const b = s(cyc(3.6)); P.bob = 0.004 * b; P.sq = 1 + 0.01 * b; }
+  else if (action === 'walk' || action === 'run') {
+    const run = action === 'run', ph = cyc(run ? 0.56 : 0.92), A = run ? 0.85 : 0.45;
+    P.lh = A * s(ph); P.rh = -A * s(ph); P.lk = (run ? 1.3 : 0.6) * Math.max(0, s(ph + 1.6)); P.rk = (run ? 1.3 : 0.6) * Math.max(0, s(ph + 1.6 + Math.PI));
+    P.la = -A * 0.9 * s(ph); P.ra = A * 0.9 * s(ph); P.le = P.re = run ? 1.4 : 0.35;
+    P.bob = (run ? 0.035 : 0.016) * Math.abs(s(ph)); P.lean = run ? 0.14 : 0.03;
+  } else if (action === 'wave') { P.raise = [0, 1]; P.ra = -2.5; P.re = 0.6 + 0.4 * s(cyc(0.42)); }
+  else if (action === 'cheer') { const b = Math.abs(s(cyc(0.5))); P.raise = [1, 1]; P.la = -2.8 + 0.15 * b; P.ra = -2.8 + 0.15 * b; P.le = P.re = 0.2; P.bob = 0.03 * b; }
+  else if (action === 'point') { P.raise = [0, 0.5]; P.ra = -1.55; P.re = 0.05; }
+  else if (action === 'nod') { P.nod = 0.16 * s(cyc(0.5)); }
+  else if (action === 'shake') { P.turn = 0.35 * s(cyc(0.45)); }
+  else if (action === 'dance') { const ph = cyc(0.5); P.lean = 0.1 * s(ph); P.la = -1.6 + 1.2 * s(ph); P.ra = -1.6 - 1.2 * s(ph); P.raise = [0.6, 0.6]; P.bob = 0.025 * Math.abs(s(ph)); P.lk = P.rk = 0.25 + 0.2 * s(ph * 2); }
+  else if (action === 'sit') { P.lh = P.rh = 1.5; P.lk = P.rk = 1.5; P.bob = -0.17; P.la = 0.4; P.ra = 0.3; P.le = P.re = 0.9; }
+  else if (action === 'jump') {
+    const k = clamp(p);
+    if (k < 0.2) { const a = k / 0.2; P.sq = 1 - 0.14 * Math.sin(Math.PI * a / 2); P.lk = P.rk = 0.9 * a; P.lh = P.rh = -0.45 * a; P.la = P.ra = 0.6 * a; }
+    else if (k < 0.82) { const a = (k - 0.2) / 0.62; P.bob = 0.34 * Math.sin(Math.PI * a); P.sq = 1 + 0.12 * Math.max(0, 1 - a * 3); P.raise = [1, 1]; P.la = P.ra = -2.6; P.lk = P.rk = 0.5 * a; }
+    else { const a = (k - 0.82) / 0.18; P.sq = 1 - 0.12 * Math.sin(Math.PI * a); P.lk = P.rk = 0.8 * Math.sin(Math.PI * a); }
+  }
+  return P;
+}
+function characterLimb(g, a, b, c, w, color, ow, out) {   // a hose from a through bend b to c, outline first
+  for (const [col, lw] of [[out, w + ow * 2], [color, w]]) {
+    g.strokeStyle = col; g.lineWidth = lw; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(a[0], a[1]); g.quadraticCurveTo(b[0], b[1], c[0], c[1]); g.stroke();
+  }
+}
+function characterDot(g, x, y, r, fill, ow, out, ry = r) {
+  g.fillStyle = out; g.beginPath(); g.ellipse(x, y, r + ow, ry + ow, 0, 0, TAU); g.fill();
+  g.fillStyle = fill; g.beginPath(); g.ellipse(x, y, r, ry, 0, 0, TAU); g.fill();
+}
+// who: a CAST name; (x, y): the ground point between the feet; h: height in px; pose: { view: front | three | side |
+// back, face: 1 right | -1 left, emotion, action, p (action progress: seconds, or 0..1 for jump), talk 0..1, look [x, y],
+// boil (line boil on twos) }; t: film time (blinks, boil, tears).
+function character(g, S, who, x, y, h, pose = {}, t = 0) {
+  const C = { skin: '#e9b48c', hair: '#2a1d16', hairStyle: 'short', top: '#3d6fb6', bottom: '#2b2f3a', shoes: '#1b1b1f', outline: '#14110f', build: 1, ...(CAST[who] || {}) };
+  const view = pose.view || 'front', f = pose.face || 1, E = { ...EMOTIONS.neutral, ...(EMOTIONS[pose.emotion] || {}) };
+  const A = actionPose(pose.action || 'idle', pose.p ?? t), ow = Math.max(1, h * 0.008), side = view === 'side', front = view === 'front' || view === 'back';
+  const salt = [...String(who)].reduce((s, ch) => s + ch.charCodeAt(0), 0);
+  const boil = pose.boil ? (i) => (hash1(Math.floor(t * 12) * 13 + i + salt) - 0.5) * h * 0.006 : () => 0;
+  const bounce = E.bounce ? Math.abs(Math.sin(TAU * t / 0.35)) * 0.012 : 0;
+  const lift = (A.bob + bounce) * h, sq = A.sq, lean = (A.lean + (E.lean || 0)) * f;
+  g.save(); g.translate(x, y);
+  g.fillStyle = 'rgba(0,0,0,0.18)'; g.beginPath(); g.ellipse(0, 0, h * 0.16 * (1 - Math.min(0.5, A.bob * 1.5)), h * 0.025, 0, 0, TAU); g.fill();
+  g.translate(0, -lift); g.scale(1 / Math.sqrt(sq), sq);
+  const hipY = -0.36 * h, shY = -0.63 * h + (E.sh || 0) * 0.02 * h, bw = 0.135 * h * C.build, lw = 0.06 * h;
+  const hipX = lean * 0.36 * h * 0.3, shX = lean * 0.63 * h * 0.5;
+  const leg = (s, hip, knee) => {         // s: -1 far/left, +1 near/right; returns the three points
+    const o = side ? 0 : s * 0.055 * h, top = [hipX + o + boil(s), hipY];
+    if (side) {
+      const k = [top[0] + f * Math.sin(hip) * 0.18 * h, top[1] + Math.cos(hip) * 0.18 * h];
+      const fa = hip - knee;
+      return [top, k, [k[0] + f * Math.sin(fa) * 0.18 * h, k[1] + Math.cos(fa) * 0.18 * h + boil(s + 3)]];
+    }
+    const short = 1 - 0.35 * Math.abs(Math.sin(hip)) - 0.25 * Math.sin(knee / 2);
+    const k = [top[0] + s * 0.01 * h, top[1] + 0.18 * h * short];
+    return [top, k, [k[0] + s * 0.01 * h, Math.min(0, k[1] + 0.18 * h * short) + boil(s + 3)]];
+  };
+  const arm = (s, ang, el, raise) => {
+    const sh = [shX + (side ? f * 0.02 * h : s * bw * 0.85) + boil(s + 7), shY + 0.03 * h];
+    let a1, a2;
+    if (side) { a1 = ang; a2 = ang - el; return [sh, [sh[0] + f * Math.sin(a1) * 0.15 * h, sh[1] + Math.cos(a1) * 0.15 * h], [sh[0] + f * (Math.sin(a1) * 0.15 + Math.sin(a2) * 0.15) * h, sh[1] + (Math.cos(a1) * 0.15 + Math.cos(a2) * 0.15) * h]]; }
+    const up = raise ? clamp((1 - Math.cos(ang)) / 2) * Math.PI * 0.95 : 0.16 + 0.12 * Math.sin(ang);
+    a1 = s * up; a2 = a1 + s * el * 0.55;
+    const e = [sh[0] + Math.sin(a1) * 0.15 * h, sh[1] + Math.cos(a1) * 0.15 * h];
+    return [sh, e, [e[0] + Math.sin(a2) * 0.15 * h, e[1] + Math.cos(a2) * 0.15 * h]];
+  };
+  const legs = [leg(-1, A.lh, A.lk), leg(1, A.rh, A.rk)];
+  const arms = [arm(-1, A.la, A.le, A.raise[0]), arm(1, A.ra, A.re, A.raise[1])];
+  const drawLeg = (L, far) => { characterLimb(g, L[0], L[1], L[2], lw, far && side ? shade(C.bottom, -0.25) : C.bottom, ow, C.outline);
+    characterDot(g, L[2][0] + (side ? f * 0.02 * h : 0), L[2][1], 0.045 * h, C.shoes, ow, C.outline, 0.025 * h); };
+  const drawArm = (R, far) => { characterLimb(g, R[0], R[1], R[2], lw * 0.82, far && side ? shade(C.top, -0.25) : C.top, ow, C.outline);
+    characterDot(g, R[2][0], R[2][1], 0.032 * h, C.skin, ow, C.outline); };
+  if (side) { drawArm(arms[0], true); drawLeg(legs[0], true); }
+  else { drawLeg(legs[0]); drawLeg(legs[1]); }
+  // torso: a bean from the shoulders to the hips
+  g.fillStyle = C.outline; g.beginPath(); g.ellipse((shX + hipX) / 2, (shY + hipY) / 2 + 0.01 * h, bw + ow, (hipY - shY) / 2 + 0.05 * h + ow, lean * 0.5, 0, TAU); g.fill();
+  g.fillStyle = C.top; g.beginPath(); g.ellipse((shX + hipX) / 2, (shY + hipY) / 2 + 0.01 * h, bw, (hipY - shY) / 2 + 0.05 * h, lean * 0.5, 0, TAU); g.fill();
+  if (side) { drawLeg(legs[1]); drawArm(arms[1]); } else { drawArm(arms[0]); drawArm(arms[1]); }
+  // head
+  const r = 0.135 * h, hx = shX * 1.3 + (pose.view === 'three' ? f * 0.01 * h : 0) + boil(11), hy = shY - r * 0.95;
+  g.save(); g.translate(hx, hy); g.rotate(((E.tilt || 0) + A.nod) * (side ? f : 1) + (view === 'three' ? 0.03 * f : 0));
+  const turn = view === 'three' ? 0.42 * f : side ? 0.95 * f : 0, tt = turn + A.turn;
+  characterHair(g, C, r, view, f, t, true, ow);
+  if (view !== 'back' && !side) { characterDot(g, -r * 0.98, r * 0.1, r * 0.18, C.skin, ow, C.outline); characterDot(g, r * 0.98, r * 0.1, r * 0.18, C.skin, ow, C.outline); }
+  characterDot(g, 0, 0, r, C.skin, ow, C.outline, r * 1.04);
+  if (side) { g.fillStyle = C.skin; g.strokeStyle = C.outline; g.lineWidth = ow; g.beginPath(); g.ellipse(f * r * 0.98, r * 0.12, r * 0.13, r * 0.11, 0, 0, TAU); g.fill(); g.stroke(); }
+  if (view === 'back' && C.hairStyle !== 'bald') { g.fillStyle = C.hair; g.strokeStyle = C.outline; g.lineWidth = ow;   // the back of the head
+    g.beginPath(); g.ellipse(0, C.hairStyle === 'short' || C.hairStyle === 'cap' ? -r * 0.15 : r * 0.05, r * 1.04, C.hairStyle === 'short' || C.hairStyle === 'cap' ? r * 0.9 : r * 1.08, 0, 0, TAU); g.fill(); g.stroke(); }
+  characterHair(g, C, r, view, f, t, false, ow);
+  if (view !== 'back') characterFace(g, C, E, r, tt, side, f, pose, t, salt, ow);   // over the fringe: brows carry half the feeling
+  g.restore(); g.restore();
+}
+function characterFace(g, C, E, r, turn, side, f, pose, t, salt, ow) {
+  const cx = Math.sin(turn) * r * 0.55, look = pose.look || E.look || [0, 0];
+  const blink = (hash1(Math.floor(t / 3.1) + salt) * 3.1 + 0.4), bl = Math.abs(t % 3.1 - blink) < 0.06 ? 0.08 : 1;
+  const open = (E.eye ?? 1) * bl, eyes = side ? [f * 0.45] : [-0.36, 0.36];
+  for (const e of eyes) {
+    const far = !side && Math.sign(e) === -Math.sign(turn) && Math.abs(turn) > 0.1;
+    const ex = cx + e * r * (side ? 1 : 1 - Math.abs(turn) * 0.35), ey = -r * 0.08, sz = far ? 0.82 : 1;
+    if (open < 0.12) {           // closed: a happy arc when laughing, a line when blinking
+      g.strokeStyle = C.outline; g.lineWidth = ow * 1.3; g.lineCap = 'round'; g.beginPath();
+      if (E.mouth === 'grin') g.arc(ex, ey + r * 0.04, r * 0.11 * sz, Math.PI * 1.15, Math.PI * 1.85); else { g.moveTo(ex - r * 0.1 * sz, ey); g.lineTo(ex + r * 0.1 * sz, ey); }
+      g.stroke();
+    } else {
+      characterDot(g, ex, ey, r * 0.12 * sz, '#fbf8f2', ow * 0.7, C.outline, r * 0.16 * sz * Math.min(1.25, open));
+      g.fillStyle = C.outline; g.beginPath(); g.arc(ex + look[0] * r * 0.06 + (side ? f * r * 0.03 : 0), ey + look[1] * r * 0.06, r * 0.07 * sz * (E.pupil || 1), 0, TAU); g.fill();
+    }
+    const by = ey - r * (0.24 + (E.browY || 0)) - (1 - Math.min(1, open)) * r * 0.04, asym = (E.browAsym || 0) * Math.sign(e || 1);
+    const tilt = ((E.brow || 0) + asym) * Math.sign(e || f) * 0.5;
+    g.strokeStyle = C.outline; g.lineWidth = r * 0.065; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(ex - r * 0.13, by - tilt * r * 0.18); g.lineTo(ex + r * 0.13, by + tilt * r * 0.18); g.stroke();
+  }
+  const mx = cx + (side ? f * r * 0.35 : 0), my = r * 0.45, mw = r * (side ? 0.22 : 0.34), talk = clamp(pose.talk || 0);
+  g.strokeStyle = C.outline; g.fillStyle = '#5a1d1d'; g.lineWidth = ow * 1.2; g.lineCap = 'round';
+  const m = E.mouth;
+  g.beginPath();
+  if (talk > 0.05 || m === 'o' || m === 'grin') {
+    const oh = m === 'o' ? r * 0.12 : m === 'grin' ? r * 0.16 : r * 0.04 + talk * r * 0.16, ow2 = m === 'o' ? r * 0.09 : mw * 0.8;
+    if (m === 'grin') { g.moveTo(mx - mw, my - r * 0.04); g.quadraticCurveTo(mx, my + oh * 1.6, mx + mw, my - r * 0.04); g.closePath(); }
+    else g.ellipse(mx, my, ow2, oh, 0, 0, TAU);
+    g.fill(); g.stroke();
+  } else {
+    const curve = { smile: 0.14, small: 0.08, frown: -0.12, flat: 0, tight: 0, side: 0.02, smirk: 0.06, wobble: 0 }[m] ?? 0;
+    const w = m === 'small' || m === 'tight' ? mw * 0.6 : mw;
+    if (m === 'wobble') { g.moveTo(mx - w, my); for (let i = 1; i <= 6; i++) g.lineTo(mx - w + (2 * w * i) / 6, my + (i % 2 ? -1 : 1) * r * 0.03); }
+    else if (m === 'smirk' || m === 'side') { g.moveTo(mx - w * 0.8, my + r * 0.02); g.quadraticCurveTo(mx, my + curve * r, mx + w, my - r * 0.06); }
+    else { g.moveTo(mx - w, my - curve * r * 0.3); g.quadraticCurveTo(mx, my + curve * r, mx + w, my - curve * r * 0.3); }
+    g.stroke();
+  }
+  if (E.blush) { g.fillStyle = 'rgba(232,96,96,0.35)'; for (const s of side ? [f * 0.35] : [-0.48, 0.48]) { g.beginPath(); g.ellipse(cx + s * r, r * 0.22, r * 0.12, r * 0.06, 0, 0, TAU); g.fill(); } }
+  if (E.tears) { g.fillStyle = '#9fd3f5'; for (const e of eyes) { const k = (t * 1.3 + (e > 0 ? 0.5 : 0)) % 1; g.beginPath(); g.ellipse(cx + e * r, r * (0.08 + k * 0.6), r * 0.04, r * 0.06, 0, 0, TAU); g.fill(); } }
+  if (E.sweat) { g.fillStyle = '#9fd3f5'; g.beginPath(); g.ellipse(cx + r * 0.75, -r * 0.35 + (t * 0.4 % 0.3) * r, r * 0.05, r * 0.08, 0, 0, TAU); g.fill(); }
+}
+function characterHair(g, C, r, view, f, t, back, ow) {
+  const st = C.hairStyle, sway = Math.sin(TAU * t / 2.4) * r * 0.03;
+  g.fillStyle = C.hair; g.strokeStyle = C.outline; g.lineWidth = ow;
+  const blob = (cx, cy, rx, ry) => { g.beginPath(); g.ellipse(cx, cy, rx, ry, 0, 0, TAU); g.fill(); g.stroke(); };
+  if (back) {                     // behind the head: long hair, a bun, the back of a bob
+    if (st === 'long') for (const s of view === 'side' ? [-f] : [-1, 1]) blob(s * r * 0.88 + sway, r * 0.55, r * 0.34, r * 0.95);   // locks to the shoulders
+    if (st === 'bob' || view === 'back') blob(0, r * 0.15, r * 1.06, r * 0.95);
+    if (st === 'bun') blob(view === 'side' ? -f * r * 0.85 : 0, -r * 0.95, r * 0.35, r * 0.32);
+    return;
+  }
+  if (st === 'bald' || view === 'back') return;
+  if (st === 'curly') { for (let i = 0; i < 7; i++) { const a = Math.PI * (1.05 + i * 0.15); blob(Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85, r * 0.26, r * 0.26); } return; }
+  if (st === 'cap') {             // a cap with a brim toward the face
+    g.beginPath(); g.ellipse(0, -r * 0.35, r * 1.02, r * 0.72, 0, Math.PI, TAU); g.closePath(); g.fill(); g.stroke();
+    g.beginPath(); g.ellipse(view === 'side' ? f * r * 0.85 : 0, -r * 0.38, view === 'side' ? r * 0.55 : r * 0.9, r * 0.12, 0, 0, TAU); g.fill(); g.stroke(); return;
+  }
+  const ox = view === 'side' ? -f * r * 0.1 : view === 'three' ? -f * r * 0.06 : 0;   // a dome with a fringe on the brow
+  g.beginPath(); g.ellipse(ox, -r * 0.12, r * 1.07, r * 0.98, 0, Math.PI * 1.04, TAU * 0.98);
+  const fx = view === 'side' ? f : view === 'three' ? f * 0.6 : 0;
+  g.quadraticCurveTo(r * (0.55 + 0.3 * fx), -r * 0.42, r * (0.1 + 0.25 * fx), -r * 0.6);
+  g.quadraticCurveTo(-r * (0.3 - 0.2 * fx), -r * 0.46, -r * 1.04 + ox, -r * 0.3); g.closePath(); g.fill(); g.stroke();
+  if (st === 'bob') { for (const s of view === 'side' ? [-f] : [-1, 1]) { g.beginPath(); g.ellipse(s * r * 0.9 + sway, r * 0.1, r * 0.22, r * 0.62, 0, 0, TAU); g.fill(); g.stroke(); } }
+}
+// The model sheet: every view, emotion and action of one actor on one frame (film.html?modelsheet=<name>), checked
+// before any scene uses the character (KIT/references/characters.md).
+function modelSheet(g, S, who) {
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = PALETTE.bg || '#f3efe6'; g.fillRect(0, 0, W, H);
+  const ink = PALETTE.ink || '#222', lab = (s, x, y) => { g.fillStyle = ink; g.font = `${Math.round(S.u * 0.022)}px sans-serif`; g.textAlign = 'center'; g.fillText(s, x, y); };
+  const views = ['front', 'three', 'side', 'back'], emo = Object.keys(EMOTIONS), acts = [['walk', 0.0], ['walk', 0.23], ['run', 0.14], ['jump', 0.1], ['jump', 0.5], ['jump', 0.9], ['wave', 0.2], ['cheer', 0.1], ['point', 0], ['dance', 0.12], ['sit', 0]];
+  const rowH = H / 3.4, big = rowH * 0.85;
+  views.forEach((v, i) => { const x = W * (i + 0.5) / 4; character(g, S, who, x, rowH * 0.95, big, { view: v }, 0.5); lab(v, x, rowH * 1.08); });
+  const cols = 8, eh = rowH * 0.55;
+  emo.forEach((e, i) => {         // busts: the face large enough to judge
+    const cw = W / cols, ch = rowH * 0.62, x = cw * ((i % cols) + 0.5), top = rowH * 1.18 + Math.floor(i / cols) * (ch + S.u * 0.035);
+    g.save(); g.beginPath(); g.rect(x - cw / 2 + 4, top, cw - 8, ch); g.clip();
+    character(g, S, who, x, top + ch * 2.15, ch * 2.4, { view: 'three', face: i % 2 ? -1 : 1, emotion: e }, 1.0); g.restore();
+    lab(e, x, top + ch + S.u * 0.025); });
+  acts.forEach(([a, p], i) => { const x = W * (i + 0.5) / acts.length, y = H * 0.955;
+    character(g, S, who, x, y, rowH * 0.5, { view: a === 'walk' || a === 'run' || a === 'sit' ? 'side' : 'front', action: a, p }, p); lab(a, x, H * 0.985); });
+}
+const MODEL_SHEET = q.get('modelsheet');
+
+// ---- Formulas: TeX from FORMULAS typeset once by MathJax into a crisp image, then drawn, tinted and revealed.
+const FORMULA = {};
+async function loadFormulas() {
+  const ids = Object.keys(FORMULAS);
+  if (!ids.length) return;
+  await new Promise((ok, fail) => {
+    window.MathJax = { svg: { fontCache: 'none' }, startup: { typeset: false } };
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js';
+    s.onload = ok; s.onerror = () => fail(new Error('MathJax did not load (network?)'));
+    document.head.appendChild(s);
+  });
+  await window.MathJax.startup.promise;
+  for (const id of ids) {
+    const svg = window.MathJax.tex2svg(FORMULAS[id], { display: true }).querySelector('svg');
+    const ex = (v) => parseFloat(v) || 1, aspect = ex(svg.getAttribute('width')) / ex(svg.getAttribute('height'));
+    const h = 480, w = Math.ceil(h * aspect);                     // rasterised large, drawn smaller: crisp at any size
+    svg.setAttribute('width', w + 'px'); svg.setAttribute('height', h + 'px'); svg.setAttribute('color', '#ffffff');
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    await img.decode();
+    FORMULA[id] = { img, aspect, tint: {} };
+  }
+}
+// Draws FORMULAS[id] centred on (x, y) (o.align: 'left' starts at x), size = its height in px, revealed left to right
+// by k (0..1). Returns its box, so labels and arrows can point at it.
+function formula(g, S, id, x, y, size, color, k = 1, o = {}) {
+  const f = FORMULA[id];
+  if (!f) throw new Error(`formula "${id}" is not in FORMULAS`);
+  const h = size, w = h * f.aspect, x0 = o.align === 'left' ? x : x - w / 2, y0 = y - h / 2;
+  let t = f.tint[color];
+  if (!t) {
+    t = document.createElement('canvas'); t.width = f.img.width; t.height = f.img.height;
+    const c = t.getContext('2d'); c.drawImage(f.img, 0, 0);
+    c.globalCompositeOperation = 'source-in'; c.fillStyle = color; c.fillRect(0, 0, t.width, t.height);
+    f.tint[color] = t;
+  }
+  g.save(); g.beginPath(); g.rect(x0 - 2, y0 - h * 0.2, (w + 4) * clamp(k), h * 1.4); g.clip();
+  g.globalAlpha *= o.alpha ?? 1; g.drawImage(t, x0, y0, w, h); g.restore();
+  return { x: x0, y: y0, w, h };
+}
+
+async function loadType(T) {
+  if (!T || !T.roles) return [];
+  const jobs = [];
+  for (const [name, r] of Object.entries(T.roles)) {
+    if (!r) continue;
+    for (const [family, url, desc] of roleFaces(r)) {
+      const f = new FontFace(family, `url(${url})`, desc);
+      jobs.push(f.load().then(() => { document.fonts.add(f); return `${name}: ${family}`; },
+        (e) => { throw new Error(`TYPE ${name} "${r.family}" failed to load ${url} (${e?.message || e}); fix the TYPE block or the fonts/ file`); }));
+    }
+  }
+  return [...new Set(await Promise.all(jobs))];
+}
+
+// font() returns a ctx.font string for a role at px, weight (any number inside the wght axis) and axes (nearest stop;
+// wdth without stops snaps to the CSS stretch keywords). Set it, then draw.
+function typeFont(T, role, px, o = {}) {
+  const r = typeRole(T, role), fb = TYPE_FALLBACK[role] || TYPE_FALLBACK.text;
+  const weight = Math.round(o.weight ?? (role === 'display' ? 700 : role === 'mono' ? 400 : 500));
+  if (!r) return `${weight} ${px}px ${fb}`;
+  let face = r.family;
+  const ax = o.axes || {};
+  if (r.stops?.length && Object.keys(ax).length) {
+    let best = null, bd = Infinity;
+    for (const s of r.stops) {
+      let d = 0;
+      for (const [k, v] of Object.entries(ax)) {
+        const span = r.axes?.[k] ? r.axes[k][1] - r.axes[k][0] || 1 : 1;
+        d += ((s[k] ?? r.axes?.[k]?.[2] ?? v) - v) ** 2 / span ** 2;
+      }
+      if (d < bd) { bd = d; best = s; }
+    }
+    face = `${r.family}~${stopKey(best)}`;
+  }
+  const stretch = ax.wdth != null && !r.stops?.some((s) => 'wdth' in s)
+    ? STRETCH.reduce((a, b) => Math.abs(b[0] - ax.wdth) < Math.abs(a[0] - ax.wdth) ? b : a)[1] : 'normal';
+  return `${o.italic ? 'italic ' : ''}${weight} ${stretch} ${px}px "${face}", ${fb}`;
+}
+
+// Tracking by size as a share of the em (typography.md §3): small text opens up, big display tightens, caps open more.
+function autoTrack(px, short, caps = false) {
+  const s = px / short;
+  if (caps) return s < 0.03 ? 0.08 : s < 0.06 ? 0.05 : s < 0.12 ? 0.03 : 0.015;
+  return s < 0.025 ? 0.015 : s < 0.06 ? 0.005 : s < 0.12 ? -0.01 : -0.02;
+}
+
+function setType(g, T, role, px, o = {}) {
+  g.font = typeFont(T, role, px, o);
+  g.letterSpacing = `${((o.track ?? autoTrack(px, o.short || 1080, o.caps)) * px).toFixed(2)}px`;
+  g.fontKerning = 'normal';
+  return g;
+}
+
+// Casing in the text's language: Turkish i/İ and ı/I need the 'tr' locale (istanbul -> İSTANBUL, IŞIK -> ışık).
+const up = (s, lang = 'tr') => String(s).toLocaleUpperCase(lang);
+const low = (s, lang = 'tr') => String(s).toLocaleLowerCase(lang);
+
+// Lines that fit maxW, with no one-word last line (widow) when it can be avoided; balance: lines of similar length.
+function wrap(g, str, maxW, balance = false) {
+  const words = String(str).split(/[ \t\n]+/).filter(Boolean);   // a no-break space (\u00A0) keeps '24.990\u00A0₺' together
+  const fit = (w) => {
+    const lines = []; let cur = '';
+    for (const word of words) {
+      const t = cur ? `${cur} ${word}` : word;
+      if (g.measureText(t).width <= w || !cur) cur = t; else { lines.push(cur); cur = word; }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  };
+  let lines = fit(maxW);
+  if (balance && lines.length > 1) {
+    let lo = maxW * 0.5, hi = maxW;
+    for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (fit(mid).length > lines.length) lo = mid; else hi = mid; }
+    lines = fit(hi);
+  }
+  const n = lines.length;
+  if (n > 1 && !lines[n - 1].includes(' ')) {
+    const prev = lines[n - 2].split(' ');
+    if (prev.length > 2) { lines[n - 1] = `${prev.pop()} ${lines[n - 1]}`; lines[n - 2] = prev.join(' '); }
+  }
+  return lines;
+}
+
+// Ink above the cap height that Turkish and other Latin diacritics need (İ dot, Ğ breve, Ş/Ç cedilla below):
+// masks and boxes use these, never the cap height alone.
+function headroom(g) {
+  const cap = g.measureText('H').actualBoundingBoxAscent, acc = g.measureText('İĞÜÖÂ').actualBoundingBoxAscent;
+  const desc = Math.max(g.measureText('ŞÇgy').actualBoundingBoxDescent, 0);
+  return { cap, above: acc, below: desc };
+}
+
+// Text in by unit (char | word): each unit rises from a baseline shift inside a mask, staggered across `spread` of
+// the progress p (0..1). ease: an easing from EASE/MOTION; order: seq | reverse | center. Draw after setType().
+function typeReveal(g, str, x, y, p, o = {}) {
+  const by = o.by || 'char', spread = o.spread ?? 0.5, rise = o.rise ?? 0.9, ease = o.ease || ((k) => 1 - (1 - k) ** 3);
+  const units = by === 'word' ? String(str).split(/(\s+)/) : [...String(str)];
+  const hr = headroom(g), top = y - hr.above * 1.08, h = hr.above * 1.08 + hr.below * 1.3 + 2;
+  const total = g.measureText(str).width;
+  let cx = (g.textAlign === 'center' ? x - total / 2 : g.textAlign === 'right' ? x - total : x);
+  const align = g.textAlign; g.textAlign = 'left';
+  const n = units.length;
+  units.forEach((u, i) => {
+    const w = g.measureText(u).width;
+    const pos = n < 2 ? 0 : (o.order === 'reverse' ? 1 - i / (n - 1) : o.order === 'center' ? Math.abs(2 * i / (n - 1) - 1) : i / (n - 1));
+    const k = ease(Math.min(1, Math.max(0, (p - pos * spread) / (1 - spread || 1))));
+    if (k > 0 && u.trim()) {
+      g.save();
+      if (o.mask !== false) { g.beginPath(); g.rect(cx - 2, top, w + 4 + parseFloat(g.letterSpacing || 0), h); g.clip(); }
+      g.globalAlpha *= o.fade ? k : 1;
+      g.fillText(u, cx, y + (1 - k) * rise * h);
+      g.restore();
+    }
+    cx += w;
+  });
+  g.textAlign = align;
+}
+
+// A weight that breathes with the beat: wght between lo and hi, peak on each beat (t in s, bpm), cosine-shaped.
+const breathe = (t, bpm, lo, hi, phase = 0) => lo + (hi - lo) * (0.5 + 0.5 * Math.cos(2 * Math.PI * (t * bpm / 60 - phase)));
+
+// ---- talking-head captions (optional style; typography.md §8) ----
+// CAPTIONS from tools/captions.py: { words: [{ w, t0, t1, group, accent, punch }], groups: [{ t0, t1, words: [i…] }] }.
+// Words appear on their own spoken time (word-locked): a short pop from 0.86 scale, the spoken word in o.hi, accent
+// words in o.accentRole (a contrasting face) and o.accent colour. Screen space, centred at o.y (share of H, default
+// above the 9:16 UI zone). o: { role, accentRole, size (share of the short side), caps, ink, hi, accent, box, y, lang }.
+function kineticCaptions(g, T, cap, t, W, H, o = {}) {
+  if (!cap) return;
+  const gi = cap.groups.findIndex((gr, i) => t >= gr.t0 - 0.04 && t < (cap.groups[i + 1]?.t0 ?? gr.t1 + 0.35));
+  if (gi < 0) return;
+  const short = Math.min(W, H), px = short * (o.size ?? 0.062), lang = o.lang ?? T?.lang ?? 'tr';
+  const words = cap.groups[gi].words.map((i) => cap.words[i]);
+  const faceOf = (w) => typeFont(T, w.accent && o.accentRole ? o.accentRole : (o.role || 'display'), px,
+    { weight: w.accent ? (o.accentWeight ?? 800) : (o.weight ?? 700), italic: w.accent && o.accentItalic });
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.textBaseline = 'alphabetic'; g.textAlign = 'left';
+  g.letterSpacing = `${(autoTrack(px, short, o.caps) * px).toFixed(2)}px`;
+  const items = words.map((w) => { const s = o.caps ? up(w.w, lang) : w.w; g.font = faceOf(w); return { w, s, wd: g.measureText(s).width }; });
+  const space = px * 0.28, maxW = W * 0.84, lines = [[]];
+  let lw = 0;
+  for (const it of items) {
+    if (lw && lw + space + it.wd > maxW) { lines.push([]); lw = 0; }
+    lines[lines.length - 1].push(it); lw += (lw ? space : 0) + it.wd;
+  }
+  const lead = px * 1.12, y0 = H * (o.y ?? (H > W ? 0.66 : 0.8)) - (lines.length - 1) * lead / 2;
+  lines.forEach((ln, li) => {
+    const total = ln.reduce((a, it, i) => a + it.wd + (i ? space : 0), 0);
+    let x = (W - total) / 2;
+    for (const it of ln) {
+      const k = Math.min(1, Math.max(0, (t - it.w.t0) / 0.12));
+      if (k > 0) {
+        const s = 0.86 + 0.14 * (1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2), y = y0 + li * lead;
+        g.save(); g.translate(x + it.wd / 2, y - px * 0.35); g.scale(s, s); g.translate(-(x + it.wd / 2), -(y - px * 0.35));
+        g.font = faceOf(it.w); g.globalAlpha = Math.min(1, k * 1.6);
+        if (o.box) { const hr = headroom(g); g.fillStyle = o.box; g.fillRect(x - px * 0.12, y - hr.above - px * 0.1, it.wd + px * 0.24, hr.above + hr.below + px * 0.22); }
+        const speaking = t >= it.w.t0 && t < it.w.t1;
+        g.fillStyle = it.w.accent ? (o.accent || '#ffd23f') : speaking ? (o.hi || o.ink || '#ffffff') : (o.ink || '#ffffff');
+        if (o.shadow !== false) { g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = px * 0.12; g.shadowOffsetY = px * 0.04; }
+        g.fillText(it.s, x, y);
+        g.restore();
+      }
+      x += it.wd + space;
+    }
+  });
+  g.restore();
+}
+
+// Punch-in on emphasis: a frame scale for the words marked punch (1 -> 1 + amount in 0.08 s, back over 0.5 s).
+function captionPunch(cap, t, amount = 0.07) {
+  let s = 1;
+  for (const w of cap?.words || []) {
+    if (!w.punch || t < w.t0 || t > w.t0 + 0.6) continue;
+    const u = t - w.t0, k = u < 0.08 ? 1 - (1 - u / 0.08) ** 3 : Math.max(0, 1 - ((u - 0.08) / 0.5)) ** 2;
+    s = Math.max(s, 1 + amount * k);
+  }
+  return s;
+}
+
+// ---- type check ----
+const lum = (hex) => {
+  const v = hex.replace('#', ''), c = [0, 2, 4].map((i) => parseInt(v.length === 3 ? v[i / 2].repeat(2) : v.slice(i, i + 2), 16) / 255);
+  const l = c.map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * l[0] + 0.7152 * l[1] + 0.0722 * l[2];
+};
+const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+
+// Characters the role's family does not draw (the browser would substitute another font): measured against two
+// different fallbacks; a width that changes with the fallback means the glyph came from the fallback.
+function missingGlyphs(g, family, str) {
+  const miss = new Set();
+  g.save(); g.letterSpacing = '0px';
+  for (const ch of new Set([...String(str)].filter((c) => c.trim()))) {
+    const w = (fb) => { g.font = `400 60px "${family}", ${fb}`; return g.measureText(ch).width; };
+    const a = w('monospace'), b = w('serif'), c = w('cursive');
+    if (Math.abs(a - b) > 0.01 || Math.abs(b - c) > 0.01) miss.add(ch);
+  }
+  g.restore();
+  return [...miss].join('');
+}
+
+// Minimum cap height in delivered pixels for text that must be read on a phone (typography.md §2).
+function minCap(W, H, kind = 'text') {
+  const short = Math.min(W, H), ar = W / H;
+  const base = ar < 1.25 ? 0.026 : 0.037;     // 9:16 and 1:1 fill the phone's width; 16:9 inline is ~0.56x as tall
+  return Math.round(short * base * (kind === 'legal' ? 0.8 : kind === 'display' ? 1.6 : 1));
+}
+
+// TYPE.check = { strings: { display: ['TITLE'], text: ['a line'] }, sizes: { text: 0.034, legal: 0.024 } (share of the
+// short side), maxChars: 32, palette: { bg, ink } }. Errors stop the render; warnings go to the capture log.
+function typeCheck(g, T, W, H, palette) {
+  const errors = [], warnings = [], c = (T && T.check) || {};
+  for (const [name, r] of Object.entries((T && T.roles) || {})) {
+    if (!r) continue;
+    const strs = [...(c.strings?.[name] || []), ...(T.lang === 'tr' || T.lang == null ? [TYPE_TR_TEST] : [])].join('');
+    const m = missingGlyphs(g, r.family, strs);
+    if (m) errors.push(`${name} "${r.family}" has no glyphs for: ${m}`);
+  }
+  for (const [kind, share] of Object.entries(c.sizes || {})) {
+    const role = kind === 'legal' ? 'text' : kind, px = share * Math.min(W, H);
+    g.save(); g.font = typeFont(T, role, px); const cap = g.measureText('H').actualBoundingBoxAscent; g.restore();
+    const need = minCap(W, H, kind);
+    if (Math.round(cap) < need) warnings.push(`${kind}: cap height ${cap.toFixed(0)} px < ${need} px for phone viewing at ${W}x${H}`);
+  }
+  const pal = c.palette || palette;
+  if (pal?.bg && pal?.ink) {
+    const k = contrast(pal.ink, pal.bg);
+    if (k < 3) errors.push(`ink on bg contrast ${k.toFixed(2)}:1 (needs 4.5:1 for text, 3:1 for large display)`);
+    else if (k < 4.5) warnings.push(`ink on bg contrast ${k.toFixed(2)}:1: large display only, not body or legal lines`);
+  }
+  const maxC = c.maxChars || (W < H ? 32 : 42);
+  for (const s of Object.values(c.strings || {}).flat())
+    if (s.length > maxC && !s.includes('\n')) warnings.push(`"${s.slice(0, 24)}…" is ${s.length} characters on one line (max ${maxC}); wrap() it`);
+  return { errors, warnings };
+}
+
+// ---- end of TYPE RUNTIME ----
+
+const buffer = () => { const c = Object.assign(document.createElement('canvas'), { width: W, height: H }); return { c, g: c.getContext('2d', { alpha: false }) }; };
+const bufA = buffer(), bufB = buffer(), bufSub = buffer(), bufOut = buffer();
+function drawScene(ctx, sc, t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  ctx.fillStyle = PALETTE.bg; ctx.fillRect(0, 0, W, H);
+  ctx.save(); sc.draw(ctx, clamp((t - sc.from) / (sc.to - sc.from)), t, S); ctx.restore();
+}
+const sceneAt = (t) => SCENES.find((s) => t >= s.from && t < s.to) ?? SCENES[SCENES.length - 1];
+function drawFilm(ctx, t) {                    // the picture at film time t: one scene, or a transition window
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.filter = 'none';
+  const j = SCENES.findIndex((s, n) => n > 0 && s.in?.dur && TRANSITION[s.in.type] && Math.abs(t - s.from) < s.in.dur / 2);
+  if (j > 0) {                                 // inside a transition window centred on the scene's start
+    const b = SCENES[j];
+    drawScene(bufA.g, SCENES[j - 1], t); drawScene(bufB.g, b, t);
+    TRANSITION[b.in.type](ctx, bufA.c, bufB.c, (t - b.from + b.in.dur / 2) / b.in.dur, b.in);
+  } else drawScene(ctx, sceneAt(t), t);
+}
+// Finishing, from FINISH (URL overrides for drafts and tests). The tone curve is a per-channel table (a 1D LUT made
+// here, no outside LUT file) applied through an SVG filter.
+const SAMPLES = Math.max(1, Math.round(+(q.get('shutter') ?? FINISH.shutter?.samples ?? 1)) || 1);
+const WEAVE = +(q.get('weave') ?? FINISH.weave) || 0, TONE = q.get('tone') === '0' ? null : FINISH.tone;
+// Blur only where something moves: the first and last sub-frames are compared at 64 px wide; under STILL (mean
+// difference, 0-255) the frame keeps one sharp draw, so a mostly still blur scene costs little render time.
+const STILL = 0.6, probe = document.createElement('canvas');
+probe.width = 64; probe.height = Math.max(1, Math.round(64 * H / W));
+const probeG = probe.getContext('2d', { willReadFrequently: true });
+const probeOf = (c) => { probeG.drawImage(c, 0, 0, probe.width, probe.height); return probeG.getImageData(0, 0, probe.width, probe.height).data; };
+const probeDiff = (a, b) => { let d = 0; for (let k = 0; k < a.length; k += 4) d += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]); return d / (0.75 * a.length); };
+function printCurve({ lift, knee, contrast, split }, channel, n = 33) {
+  return Array.from({ length: n }, (_, i) => {
+    const x = i / (n - 1), y = x <= knee ? x : knee + (1 - knee) * (1 - Math.exp(-(x - knee) / (1 - knee)));
+    const s = lerp(y, y * y * (3 - 2 * y), contrast), v = lift + (1 - lift) * s;
+    return clamp(v + split * (v - 0.5) * (channel === 'R' ? 1 : channel === 'B' ? -1 : 0)).toFixed(4);
+  }).join(' ');
+}
+if (TONE) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute"><filter id="tone"
+    color-interpolation-filters="sRGB"><feComponentTransfer>${['R', 'G', 'B'].map((c) =>
+    `<feFunc${c} type="table" tableValues="${printCurve(TONE, c)}"/>`).join('')}</feComponentTransfer></filter></svg>`;
+  document.body.insertAdjacentHTML('beforeend', svg);
+}
+window.renderFrame = (frame) => {
+  if (MODEL_SHEET) { modelSheet(g, S, MODEL_SHEET); return; }
+  const t = frame / FPS;                       // time comes only from the frame index
+  const tp = LOOK.hold < FPS ? Math.floor(t * LOOK.hold + 1e-6) / LOOK.hold : t;   // picture time: on twos, each drawing holds
+  const punch = CAPTIONS ? captionPunch(CAPTIONS, t, CAPTION_STYLE.punch) : 1;
+  const sc = sceneAt(t), n = sc.blur ? SAMPLES : 1, finish = WEAVE || TONE || punch !== 1 || LOOK.grade || LOOK.bloom;
+  const target = finish ? bufOut.g : g;
+  if (n === 1) drawFilm(target, tp);
+  else {                                       // 180° shutter: n sub-frames across the open half, centred on the frame
+    const open = (FINISH.shutter?.deg ?? 180) / 360 / FPS;
+    const at = (s) => clamp(tp + ((s + 0.5) / n - 0.5) * open, sc.from, sc.to - 1e-6);   // a hard cut never blends
+    target.setTransform(1, 0, 0, 1, 0, 0); target.filter = 'none';
+    drawFilm(bufSub.g, at(0)); target.globalAlpha = 1; target.drawImage(bufSub.c, 0, 0);
+    const first = probeOf(bufSub.c);
+    drawFilm(bufSub.g, at(n - 1));
+    if (probeDiff(first, probeOf(bufSub.c)) < STILL) drawFilm(target, tp);   // nothing moves: one sharp draw
+    else {
+      target.globalAlpha = 1 / 2; target.drawImage(bufSub.c, 0, 0);
+      for (let s = 1; s < n - 1; s++) {
+        drawFilm(bufSub.g, at(s)); target.globalAlpha = 1 / (s + 2); target.drawImage(bufSub.c, 0, 0);
+      }
+    }
+    target.globalAlpha = 1;
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.filter = 'none';
+  if (finish) {                                // gate weave: a seeded sub-pixel drift of the whole frame, new every frame
+    const px = WEAVE * S.u / 1080, o = (1 + 3 * px / S.u) * punch;
+    const dx = px * (0.6 * (2 * noise1(frame * 0.37 + 11) - 1) + 0.4 * (2 * hash1(frame + 0.17) - 1));
+    const dy = 0.7 * px * (0.6 * (2 * noise1(frame * 0.31 + 47) - 1) + 0.4 * (2 * hash1(frame + 0.61) - 1));
+    const rect = [dx - W * (o - 1) / 2, dy - H * (o - 1) / 2, W * o, H * o];
+    g.filter = [LOOK.grade, TONE && 'url(#tone)'].filter(Boolean).join(' ') || 'none';
+    g.drawImage(bufOut.c, ...rect);
+    if (LOOK.bloom) {                          // highlights only: darks pushed down before the blur, then added on top
+      g.save(); g.globalCompositeOperation = 'lighter'; g.globalAlpha = LOOK.bloom;
+      g.filter = `brightness(0.55) contrast(2.4) blur(${(S.u * 0.014).toFixed(1)}px)`; g.drawImage(bufOut.c, ...rect); g.restore();
+    }
+    g.filter = 'none';
+  }
+  lookTexture(g, S); vignette(g, S, LOOK.vignette);
+  if (CAPTIONS) kineticCaptions(g, TYPE, CAPTIONS, t, W, H, CAPTION_STYLE);   // after the grade: exact type colours
+  grain(g, S, LOOK.grainHold > 1 ? Math.floor(frame / LOOK.grainHold) : frame, LOOK.grain);
+};
+window.captureFrame = (frame, type = 'image/png', quality = 0.95) => { window.renderFrame(frame); return canvas.toDataURL(type, quality); };
+
+// ============================== HELPERS (sound) ==============================
+// Small voices built from oscillators and seeded noise. Every voice takes (ctx, out, start time, ..., gain).
+function noiseBuffer(ctx, secs, salt) {
+  const b = ctx.createBuffer(1, Math.ceil(secs * ctx.sampleRate), ctx.sampleRate), d = b.getChannelData(0), r = rng(salt);
+  for (let i = 0; i < d.length; i++) d[i] = r() * 2 - 1;
+  return b;
+}
+function env(param, t, a, peak, d, end = 0.0001) { param.setValueAtTime(0.0001, t); param.exponentialRampToValueAtTime(peak, t + a); param.exponentialRampToValueAtTime(end, t + a + d); }
+function pad(ctx, out, t, dur, freqs, gain) {
+  const v = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  v.gain.setValueAtTime(gain, t); v.gain.setValueAtTime(gain, t + dur - 0.6); v.gain.linearRampToValueAtTime(0.0001, t + dur);
+  v.connect(lp).connect(out);
+  for (const f of freqs) for (const det of [-7, 7]) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+    const p = ctx.createStereoPanner(); p.pan.value = det / 10; o.connect(p).connect(v); o.start(t); o.stop(t + dur);
+  }
+}
+function kick(ctx, out, t, gain) {
+  const o = ctx.createOscillator(), v = ctx.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.18);
+  env(v.gain, t, 0.003, gain, 0.35); o.connect(v).connect(out); o.start(t); o.stop(t + 0.4);
+}
+function tick(ctx, out, t, gain) {
+  const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), v = ctx.createGain();
+  s.buffer = noiseBuffer(ctx, 0.06, Math.round(t * 1000)); hp.type = 'highpass'; hp.frequency.value = 6000;
+  env(v.gain, t, 0.001, gain, 0.05); s.connect(hp).connect(v).connect(out); s.start(t);
+}
+function hit(ctx, out, t, gain) {
+  kick(ctx, out, t, gain);
+  const s = ctx.createBufferSource(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+  s.buffer = noiseBuffer(ctx, 1.6, 99); lp.type = 'lowpass'; lp.frequency.setValueAtTime(3200, t); lp.frequency.exponentialRampToValueAtTime(200, t + 1.2);
+  env(v.gain, t, 0.002, gain * 0.5, 1.4); s.connect(lp).connect(v).connect(out); s.start(t);
+}
+function riser(ctx, out, t, dur, gain) {
+  const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain();
+  s.buffer = noiseBuffer(ctx, dur, 42); bp.type = 'bandpass'; bp.Q.value = 4;
+  bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(3500, t + dur);
+  v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(gain, t + dur - 0.02); v.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(bp).connect(v).connect(out); s.start(t); s.stop(t + dur);
+}
+// A whoosh into a cut is a low swell, not air: a body under 150 Hz with its 150-300 Hz harmonics (what a phone speaker
+// can play) and a faint air layer 26 dB down; it swells, accelerating, to its peak at t + dur / 2 (put that on the cut)
+// and is gone 0.25 s later. Use it for the few cuts that carry meaning; the music carries the rest.
+function whoosh(ctx, out, t, dur, gain) {
+  const peak = t + dur * 0.5, end = peak + 0.3, n = noiseBuffer(ctx, end - t, 77);
+  const layer = (type, f, q, g, pan) => {
+    const s = ctx.createBufferSource(), fl = ctx.createBiquadFilter(), v = ctx.createGain(), p = ctx.createStereoPanner();
+    s.buffer = n; fl.type = type; fl.frequency.value = f; fl.Q.value = q; p.pan.value = pan;
+    v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(g * 0.1, t + dur * 0.3);
+    v.gain.exponentialRampToValueAtTime(g, peak); v.gain.exponentialRampToValueAtTime(g * 0.1, peak + 0.1);
+    v.gain.exponentialRampToValueAtTime(g * 0.01, peak + 0.25); v.gain.linearRampToValueAtTime(0, end);
+    s.connect(fl).connect(v).connect(p).connect(out); s.start(t); s.stop(end);
+  };
+  layer('lowpass', 140, 0.7, gain * 1.6, 0);            // body
+  layer('bandpass', 220, 1.2, gain * 0.6, 0);           // its harmonics: the part a phone speaker plays
+  layer('bandpass', 2800, 0.8, gain * 0.05, 0.3);       // air, 26 dB down
+}
+// Air: a real rush of air past the camera (wind, a fast object close by), never the sound of a cut.
+function air(ctx, out, t, dur, gain) {
+  const s = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain(), p = ctx.createStereoPanner();
+  s.buffer = noiseBuffer(ctx, dur, 77); bp.type = 'bandpass'; bp.Q.value = 2;
+  bp.frequency.setValueAtTime(400, t); bp.frequency.exponentialRampToValueAtTime(3000, t + dur * 0.5); bp.frequency.exponentialRampToValueAtTime(500, t + dur);
+  p.pan.setValueAtTime(-0.8, t); p.pan.linearRampToValueAtTime(0.8, t + dur);
+  v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(gain, t + dur * 0.5); v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(bp).connect(v).connect(p).connect(out); s.start(t); s.stop(t + dur);
+}
+function pluck(ctx, out, t, f, gain) {
+  const o = ctx.createOscillator(), v = ctx.createGain(); o.type = 'triangle'; o.frequency.value = f;
+  env(v.gain, t, 0.004, gain, 1.2); o.connect(v).connect(out); o.start(t); o.stop(t + 1.3);
+}
+// A sustained lead that stays easy on the ear: triangle + a little saw, low-passed (<= 2.4 kHz), soft 40 ms attack.
+function lead(ctx, out, t, f, dur, gain, cutoff = 2400) {
+  const v = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; lp.Q.value = 0.5;
+  v.gain.setValueAtTime(0.0001, t); v.gain.linearRampToValueAtTime(gain, t + 0.04);
+  v.gain.setValueAtTime(gain, t + Math.max(0.05, dur - 0.15)); v.gain.linearRampToValueAtTime(0.0001, t + dur);
+  lp.connect(v).connect(out);
+  for (const [type, mix] of [['triangle', 1], ['sawtooth', 0.25]]) {
+    const o = ctx.createOscillator(), m = ctx.createGain(); o.type = type; o.frequency.value = f; m.gain.value = mix;
+    o.connect(m).connect(lp); o.start(t); o.stop(t + dur);
+  }
+}
+// Foley: short filtered noise bursts for contacts. kind: step (soft, low), tap (hard, small), cloth (long, airy).
+function foley(ctx, out, t, kind, gain) {
+  const k = { step: [180, 900, 0.09], tap: [900, 3200, 0.03], cloth: [600, 3000, 0.25] }[kind] || [400, 2500, 0.08];
+  const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+  s.buffer = noiseBuffer(ctx, k[2] + 0.05, Math.round(t * 997)); hp.type = 'highpass'; hp.frequency.value = k[0];
+  lp.type = 'lowpass'; lp.frequency.value = k[1]; env(v.gain, t, 0.002, gain, k[2]);
+  s.connect(hp).connect(lp).connect(v).connect(out); s.start(t);
+}
+// Ambience bed for one scene: looped seeded noise shaped per kind, slow seeded drift, 0.3 s crossfades at the edges.
+function ambience(ctx, out, from, to, kind, gain, salt) {
+  const k = { room: [60, 450, 0.05], air: [150, 1100, 0.15], water: [300, 2200, 0.6], city: [80, 1300, 0.08] }[kind] || [80, 900, 0.1];
+  const a = Math.max(0, from - 0.3), b = Math.min(DURATION, to + 0.3), r = rng(salt);
+  const s = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), lp = ctx.createBiquadFilter(), v = ctx.createGain();
+  s.buffer = noiseBuffer(ctx, 6, salt); s.loop = true; hp.type = 'highpass'; hp.frequency.value = k[0];
+  lp.type = 'lowpass'; lp.frequency.value = k[1];
+  v.gain.setValueAtTime(0.0001, a); v.gain.linearRampToValueAtTime(gain, a + 0.3);
+  for (let t = a + 0.3; t < b - 0.3; t += 0.5) v.gain.linearRampToValueAtTime(gain * (1 - k[2] * r()), Math.min(b - 0.3, t + 0.5));
+  v.gain.linearRampToValueAtTime(0.0001, b);
+  s.connect(hp).connect(lp).connect(v).connect(out); s.start(a, r() * 5); s.stop(b);
+}
+// The shared room: a convolution reverb from a generated, seeded impulse (decaying stereo noise, darkened by tone).
+let ROOM_IN = null;
+function makeRoom(ctx, out) {
+  const n = Math.round(ROOM.secs * ctx.sampleRate), ir = ctx.createBuffer(2, n, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c), r = rng(500 + c);
+    for (let i = 0; i < n; i++) d[i] = (r() * 2 - 1) * (1 - i / n) ** ROOM.decay;
+  }
+  const conv = ctx.createConvolver(), lp = ctx.createBiquadFilter(), ret = ctx.createGain();
+  conv.buffer = ir; lp.type = 'lowpass'; lp.frequency.value = ROOM.tone; ret.gain.value = 0.5;
+  conv.connect(lp).connect(ret).connect(out);
+  return conv;
+}
+// Send a voice to the room: wet(ctx, out, 0.3) returns a node that feeds the dry bus and the shared reverb.
+function wet(ctx, out, amount) {
+  const n = ctx.createGain(); n.connect(out);
+  if (ROOM_IN && amount > 0) { const s = ctx.createGain(); s.gain.value = amount; n.connect(s).connect(ROOM_IN); }
+  return n;
+}
+function sfx(ctx, out, e) {
+  const o = wet(ctx, out, e.wet ?? 0.2);
+  if (e.voice === 'hit') hit(ctx, o, e.at, e.gain);
+  else if (e.voice === 'whoosh') whoosh(ctx, o, e.at, e.dur ?? 0.7, e.gain);
+  else if (e.voice === 'air') air(ctx, o, e.at, e.dur ?? 0.7, e.gain);
+  else if (e.voice === 'riser') riser(ctx, o, e.at, e.dur ?? 1.6, e.gain);
+  else if (e.voice === 'tick') tick(ctx, o, e.at, e.gain);
+  else if (e.voice === 'foley') foley(ctx, o, e.at, e.kind ?? 'tap', e.gain);
+  else throw new Error(`SFX: unknown voice ${e.voice}`);
+}
+// Arrangement helpers. spans(part): [from, to) runs where the part plays, neighbouring sections merged (one voice per
+// run). beats(part, every): grid times inside those runs, half-open, so a boundary beat is played once.
+function spans(part) {
+  const out = [];
+  for (const s of ARRANGEMENT) if (s.parts.includes(part)) {
+    const last = out[out.length - 1];
+    if (last && Math.abs(last[1] - s.from) < 1e-6) last[1] = s.to; else out.push([s.from, s.to]);
+  }
+  return out;
+}
+function beats(part, every = 60 / BPM) {
+  const out = [];
+  for (const [a, b] of spans(part)) for (let n = Math.ceil(a / every - 1e-6); n * every < b - 1e-6; n++) out.push(n * every);
+  return out;
+}
+// ---- Music toolkit (KIT/references/sound.md §8): notes and chords by name, grooves as step patterns, drums and bass
+// synthesised here, so a film's music can be any genre, never only a bed and a pluck.
+const NOTE_PC = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
+function midiOfName(name) {
+  const m = /^([A-G][#b]?)(-?\d)$/.exec(name);
+  if (!m) throw new Error(`note "${name}": use a name like A3, C#4, Eb2`);
+  return 12 * (+m[2] + 1) + NOTE_PC[m[1]];
+}
+const hz = (n) => 440 * 2 ** (((typeof n === 'number' ? n : midiOfName(n)) - 69) / 12);   // hz('A4') = 440, hz(69) = 440
+const CHORD = { '': [0, 4, 7], m: [0, 3, 7], 7: [0, 4, 7, 10], maj7: [0, 4, 7, 11], m7: [0, 3, 7, 10], m9: [0, 3, 7, 10, 14],
+  9: [0, 4, 7, 10, 14], add9: [0, 4, 7, 14], sus2: [0, 2, 7], sus4: [0, 5, 7], dim: [0, 3, 6], aug: [0, 4, 8], 6: [0, 4, 7, 9],
+  m6: [0, 3, 7, 9], 5: [0, 7] };
+// chord('Am7', 3): its notes in Hz from octave 3; 'C/E' puts E under it; { open: true } spreads every other note up
+function chord(name, octave = 3, o = {}) {
+  const m = /^([A-G][#b]?)([a-z0-9]*)(?:\/([A-G][#b]?))?$/.exec(name);
+  if (!m || !(m[2] in CHORD)) throw new Error(`chord "${name}": a root and one of ${Object.keys(CHORD).map((q) => q || 'major').join(', ')}`);
+  const root = midiOfName(m[1] + octave);
+  let notes = CHORD[m[2]].map((i) => root + i);
+  if (o.open) notes = notes.map((n, i) => n + (i % 2 ? 12 : 0));
+  if (m[3]) notes = [midiOfName(m[3] + (octave - 1)), ...notes];
+  return notes.map(hz);
+}
+// The chord of a progression sounding at time t: one chord per `barsEach` bars from bar `from`, looping.
+function chordAt(prog, t, barsEach = 1, from = 0) {
+  const n = Math.floor((t - bar(from)) / ((bar(1) - bar(0)) * barsEach) + 1e-6);
+  return prog[((n % prog.length) + prog.length) % prog.length];
+}
+// A groove as steps over one bar, inside the part's spans: 'x' a hit, 'X' an accent, anything else a rest; 16 steps
+// usually (8 or 12 work); swing 0..0.3 delays the off steps. Returns [{ t, accent, step }].
+function grid(part, pattern, o = {}) {
+  const steps = pattern.length, len = bar(1) - bar(0), out = [];
+  for (const [a, b] of spans(part)) {
+    for (let n = Math.floor((a - BEAT0) / len); bar(n) < b - 1e-6; n++) for (let i = 0; i < steps; i++) {
+      const c = pattern[i];
+      if (c !== 'x' && c !== 'X') continue;
+      const t = bar(n) + (i + (i % 2 ? o.swing || 0 : 0)) * len / steps;
+      if (t >= a - 1e-6 && t < b - 1e-6) out.push({ t, accent: c === 'X', step: i });
+    }
+  }
+  return out;
+}
+function snare(ctx, out, t, gain, o = {}) {           // noise crack + a short tonal body; o.tone in Hz, o.dry = tighter
+  const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain();
+  n.buffer = noiseBuffer(ctx, 0.3, Math.round(t * 977) + 3); bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 0.7;
+  env(v.gain, t, 0.001, gain, o.dry ? 0.09 : 0.18); n.connect(bp).connect(v).connect(out); n.start(t);
+  const b = ctx.createOscillator(), bv = ctx.createGain(); b.frequency.setValueAtTime(o.tone || 190, t); b.frequency.exponentialRampToValueAtTime((o.tone || 190) * 0.7, t + 0.08);
+  env(bv.gain, t, 0.001, gain * 0.6, 0.08); b.connect(bv).connect(out); b.start(t); b.stop(t + 0.12);
+}
+function hat(ctx, out, t, gain, o = {}) {              // closed by default; o.open = a longer, softer ring
+  const n = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), v = ctx.createGain();
+  n.buffer = noiseBuffer(ctx, 0.5, Math.round(t * 991) + 5); hp.type = 'highpass'; hp.frequency.value = 7200;
+  env(v.gain, t, 0.001, gain, o.open ? 0.32 : 0.045); n.connect(hp).connect(v).connect(out); n.start(t);
+}
+function clap(ctx, out, t, gain) {                    // three quick bursts and a short tail
+  for (const [d, g2, len] of [[0, 1, 0.012], [0.011, 0.8, 0.012], [0.022, 1, 0.15]]) {
+    const n = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), v = ctx.createGain();
+    n.buffer = noiseBuffer(ctx, 0.25, Math.round(t * 983) + d * 1000); bp.type = 'bandpass'; bp.frequency.value = 1250; bp.Q.value = 1.2;
+    env(v.gain, t + d, 0.001, gain * g2, len); n.connect(bp).connect(v).connect(out); n.start(t + d);
+  }
+}
+function sub808(ctx, out, t, dur, f, gain, o = {}) {   // an 808 style sub: a sine that may glide in, softly driven
+  const os = ctx.createOscillator(), v = ctx.createGain(), sh = ctx.createWaveShaper(), curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) { const x = i / 127.5 - 1; curve[i] = Math.tanh(x * (o.drive || 1.6)); }
+  sh.curve = curve; os.frequency.setValueAtTime(f * (o.glideFrom || 1), t); os.frequency.exponentialRampToValueAtTime(f, t + (o.glide || 0.04));
+  v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(gain, t + 0.006); v.gain.setValueAtTime(gain, t + dur * 0.6);
+  v.gain.exponentialRampToValueAtTime(0.0001, t + dur); os.connect(sh).connect(v).connect(out); os.start(t); os.stop(t + dur + 0.02);
+}
+function bass(ctx, out, t, dur, f, gain, o = {}) {     // a played bass: saw + square an octave down, a closing filter
+  const v = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = o.q || 2;
+  const c = o.cutoff || 900; lp.frequency.setValueAtTime(c * 2.2, t); lp.frequency.exponentialRampToValueAtTime(c * 0.5, t + Math.min(dur, 0.35));
+  env(v.gain, t, 0.006, gain, dur); lp.connect(v).connect(out);
+  for (const [type, mul, g2] of [['sawtooth', 1, 0.7], ['square', 0.5, 0.4]]) {
+    const os = ctx.createOscillator(), gv = ctx.createGain(); os.type = type; os.frequency.value = f * mul; gv.gain.value = g2;
+    os.connect(gv).connect(lp); os.start(t); os.stop(t + dur + 0.05);
+  }
+}
+function stab(ctx, out, t, dur, freqs, gain, o = {}) {  // a chord stab: detuned saws through a low-pass, short
+  const v = ctx.createGain(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = o.cutoff || 2200;
+  env(v.gain, t, 0.004, gain, dur); lp.connect(v).connect(out);
+  for (const f of freqs) for (const det of [-9, 9]) {
+    const os = ctx.createOscillator(); os.type = 'sawtooth'; os.frequency.value = f; os.detune.value = det;
+    const gv = ctx.createGain(); gv.gain.value = 1 / (freqs.length * 2); os.connect(gv).connect(lp); os.start(t); os.stop(t + dur + 0.05);
+  }
+}
+function checkArrangement() {
+  const errs = [];
+  ARRANGEMENT.forEach((s, i) => {
+    const prev = ARRANGEMENT[i - 1];
+    if (s.to <= s.from) errs.push(`${s.section}: ends before it starts`);
+    if (!prev && Math.abs(s.from) > 1e-6) errs.push(`${s.section}: the first section starts at 0`);
+    if (prev && Math.abs(prev.to - s.from) > 1e-6) errs.push(`${prev.section} → ${s.section}: ${prev.to > s.from ? 'overlap' : 'gap'}`);
+    if (new Set(s.parts).size !== s.parts.length) errs.push(`${s.section}: a part is listed twice`);
+  });
+  const end = ARRANGEMENT[ARRANGEMENT.length - 1];
+  if (!end || Math.abs(end.to - DURATION) > 1e-6) errs.push('the last section ends at DURATION');
+  if (errs.length) throw new Error('ARRANGEMENT: ' + errs.join('; '));
+}
+
+// Music ducks under the narration: depth 0.3 ≈ -10 dB, down 0.15 s before a line, back over 0.4 s after it.
+function duck(param, level, lines, depth = 0.3) {
+  param.setValueAtTime(level, 0);
+  const spans = [];
+  for (const { at, dur } of [...lines].sort((a, b) => a.at - b.at)) {
+    const last = spans[spans.length - 1];
+    if (last && at - 0.15 < last[1] + 0.4) last[1] = Math.max(last[1], at + dur); else spans.push([at, at + dur]);
+  }
+  for (const [s, e] of spans) {
+    param.setValueAtTime(level, Math.max(0, s - 0.15)); param.linearRampToValueAtTime(level * depth, s);
+    param.setValueAtTime(level * depth, e); param.linearRampToValueAtTime(level, e + 0.4);
+  }
+}
+
+// Recorded instruments. sample(ctx, out, name, t, { note, vel, gain, pan }): pitched takes play the nearest recorded
+// note re-pitched to `note` ('E5' or a MIDI number; over 4 semitones from a take stops the render unless o.stretch);
+// unpitched ones pick a take by vel (0 quiet .. 1 loud). Levels are set per instrument, so the takes keep their dynamics.
+const BANK = {};
+async function loadSamples(ctx) {
+  if (!INSTRUMENTS.length) return;
+  const idx = await new Promise((ok, fail) => {
+    const x = new XMLHttpRequest(); x.open('GET', 'audio/samples/index.json');
+    x.onload = () => { try { ok(JSON.parse(x.responseText)); } catch (e) { fail(new Error('samples: audio/samples/index.json')); } };
+    x.onerror = () => fail(new Error(`samples: run tools/samples.py get ${INSTRUMENTS.join(' ')}`)); x.send();
+  });
+  for (const name of INSTRUMENTS) {
+    const takes = idx[name];
+    if (!takes) throw new Error(`samples: ${name} is not in audio/samples (tools/samples.py get ${name})`);
+    const peak = Math.max(...takes.map((t) => t.peak || 0.1));
+    BANK[name] = (await Promise.all(takes.map(async (t) => ({ buf: await loadAudio(ctx, 'audio/samples/' + t.file),
+      midi: t.midi, level: t.rms || 0.01, norm: 0.5 / peak })))).sort((a, b) => a.level - b.level);
+  }
+}
+const noteName = (m) => ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'][m % 12] + (Math.floor(m / 12) - 1);
+const midiOf = (n) => {
+  if (typeof n === 'number') return n;
+  const m = /^([A-G])(#|b)?(-?\d)$/.exec(n);
+  if (!m) throw new Error(`sample: note "${n}" (write E5, F#3 or a MIDI number)`);
+  return 'C D EF G A B'.indexOf(m[1]) + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12 * (+m[3] + 1);
+};
+function sample(ctx, out, name, t, o = {}) {
+  const takes = BANK[name];
+  if (!takes) throw new Error(`sample: "${name}" is not in INSTRUMENTS`);
+  const pitched = takes.filter((k) => Number.isInteger(k.midi)), vel = clamp(o.vel ?? 0.7);
+  let take = takes[Math.min(takes.length - 1, Math.floor(vel * takes.length))], rate = 1;
+  if (o.note != null && pitched.length) {
+    const want = midiOf(o.note);
+    take = pitched.reduce((a, b) => (Math.abs(b.midi - want) < Math.abs(a.midi - want) ? b : a));
+    if (Math.abs(want - take.midi) > 4 && !o.stretch) {
+      const lo = Math.min(...pitched.map((k) => k.midi)), hi = Math.max(...pitched.map((k) => k.midi));
+      throw new Error(`sample: ${name} ${o.note} is ${Math.abs(want - take.midi)} semitones from its nearest take (it plays `
+        + `${noteName(lo)}–${noteName(hi)}): an octave ${want > hi ? 'lower' : 'higher'}, another player, or { stretch: true } for an effect`);
+    }
+    rate = Math.pow(2, (want - take.midi) / 12);
+  }
+  const src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = take.buf; src.playbackRate.value = rate;
+  g.gain.value = (o.gain ?? 0.8) * take.norm * (o.note != null ? 0.4 + 0.6 * vel : 1);
+  let node = src.connect(g);
+  if (o.pan) { const p = ctx.createStereoPanner(); p.pan.value = o.pan; node = node.connect(p); }
+  node.connect(out); src.start(Math.max(0, t));
+  return src;
+}
+
+function loadAudio(ctx, url) {              // a local WAV next to film.html (XHR works on file:// in the capture)
+  return new Promise((ok, fail) => {
+    const x = new XMLHttpRequest(); x.open('GET', url.replace(/#/g, '%23')); x.responseType = 'arraybuffer';
+    x.onload = () => (x.status === 0 || x.status === 200) ? ctx.decodeAudioData(x.response).then(ok, fail)
+      : fail(new Error(`own music: ${url} (${x.status})`));
+    x.onerror = () => fail(new Error(`own music: could not load ${url}`)); x.send();
+  });
+}
+window.renderAudio = async () => {
+  const ctx = new OfflineAudioContext(2, Math.round(DURATION * SR), SR);
+  const bus = ctx.createGain(); duck(bus.gain, 0.8, VO);
+  const lim = ctx.createDynamicsCompressor();  // safety only; loudness is set afterwards by master_audio.py
+  lim.threshold.value = -6; lim.knee.value = 6; lim.ratio.value = 8; lim.attack.value = 0.003; lim.release.value = 0.15;
+  bus.connect(lim).connect(ctx.destination);
+  ROOM_IN = makeRoom(ctx, bus);
+  await loadSamples(ctx);
+  SCENES.forEach((s, i) => { if (s.amb) ambience(ctx, wet(ctx, bus, 0.15), s.from, s.to, s.amb.kind, s.amb.gain, 300 + i); });
+  for (const e of SFX) sfx(ctx, bus, e);
+  if (OWN_MUSIC) {
+    const src = ctx.createBufferSource(), gain = ctx.createGain();
+    src.buffer = await loadAudio(ctx, OWN_MUSIC.file); gain.gain.value = OWN_MUSIC.gain ?? 0.8;
+    src.connect(gain).connect(bus); src.start(0);
+  } else score(ctx, bus);
+  return ctx.startRendering();
+};
+
+window.READY = loadType(TYPE).then(loadFormulas).then(() => document.fonts.ready).then(() => {
+  const qc = typeCheck(g, TYPE, W, H, PALETTE);  // missing glyphs or unreadable contrast stop here; warnings go to the log
+  if (qc.errors.length) throw new Error('type check: ' + qc.errors.join(' · '));
+  if (!OWN_MUSIC) checkArrangement();          // the user's own song brings its own arrangement
+  return { frames: FRAMES, fps: FPS, width: W, height: H, renderer: 'canvas2d', qc: qc.warnings,
+           title: TITLE, bounds: SCENES.map((s) => s.from).concat(DURATION), vo: VO.length,
+           sfx: SFX.map((e) => [Math.round(e.at * 100) / 100, e.voice, e.dur ?? null]),
+           palette: PALETTE, lookPalette: LOOK.palette, families: Object.values(TYPE.roles || {}).filter(Boolean).map((r) => r.family) };
+});
+
+// Text check (make.py runs it on drafts and finals, ?textcheck=1 only; renders never take this path). Every fillText and
+// strokeText on a full-frame canvas is watched: its ink is the pixels it changed. Ink of two lines stacked over each
+// other on the same pixels is an overlap; a piece of type whose face is within 2:1 of what is around half or more of
+// its letters is low contrast. window.textCheck(frame) draws one frame and returns what it found there.
+if (q.get('textcheck')) {
+  const P = CanvasRenderingContext2D.prototype, owners = new WeakMap(), calls = [];
+  let frameStart = 0, found = [];
+  const lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const lum = (r, gg, b) => 0.2126 * lin(r) + 0.7152 * lin(gg) + 0.0722 * lin(b);
+  const rgbOf = (s) => {
+    if (typeof s !== 'string') return null;
+    if (s[0] === '#' && s.length === 7) return [1, 3, 5].map((i) => parseInt(s.slice(i, i + 2), 16));
+    const m = s.match(/rgba?\(([^)]+)\)/);
+    return m ? m[1].split(',').slice(0, 3).map(Number) : null;
+  };
+  const watch = (orig, stroke) => function (str, x, y, ...rest) {
+    const cv = this.canvas, s = String(str);
+    if (cv.width !== W || cv.height !== H || !s.trim() || this.globalAlpha < 0.6) return orig.call(this, str, x, y, ...rest);
+    const m = this.measureText(s), T = this.getTransform();
+    const pts = [[x - m.actualBoundingBoxLeft, y - m.actualBoundingBoxAscent], [x + m.actualBoundingBoxRight, y - m.actualBoundingBoxAscent],
+      [x - m.actualBoundingBoxLeft, y + m.actualBoundingBoxDescent], [x + m.actualBoundingBoxRight, y + m.actualBoundingBoxDescent]]
+      .map(([px, py]) => [T.a * px + T.c * py + T.e, T.b * px + T.d * py + T.f]);
+    const pad = 3 + (this.shadowBlur || 0) + Math.abs(this.shadowOffsetX || 0) + Math.abs(this.shadowOffsetY || 0);
+    const x0 = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[0])) - pad)), x1 = Math.min(W, Math.ceil(Math.max(...pts.map((p) => p[0])) + pad));
+    const y0 = Math.max(0, Math.floor(Math.min(...pts.map((p) => p[1])) - pad)), y1 = Math.min(H, Math.ceil(Math.max(...pts.map((p) => p[1])) + pad));
+    if (x1 - x0 < 2 || y1 - y0 < 2) return orig.call(this, str, x, y, ...rest);
+    const before = this.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    const result = orig.call(this, str, x, y, ...rest);
+    const after = this.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    const cap = Math.abs(T.d) * m.actualBoundingBoxAscent, base = T.b * x + T.d * y + T.f;
+    const left = Math.min(...pts.map((p) => p[0])), right = Math.max(...pts.map((p) => p[0]));
+    const last = calls.length > frameStart ? calls[calls.length - 1] : null, same = last && last.cv === cv;
+    // the same string again at about the same place is a layer of one piece of type (extrusion, shadow, outline + fill)
+    const layer = same && last.s === s && Math.abs(last.base - base) < 0.3 * cap && Math.abs(last.left - left) < 0.3 * cap;
+    // apart: how far a baseline lies outside a piece of type's baselines (all its layers, an extrusion runs deep)
+    const apart = (st, b) => Math.max(0, st.lo - b, b - st.hi);
+    let run = same && apart(last.stack, base) <= 0.6 * Math.min(last.cap, cap) ? last.run : null;   // bouncing letters stay one line
+    if (run && !layer) { run.label += (left - run.right > 0.25 * cap ? ' ' : '') + s; run.right = Math.max(run.right, right); }
+    else if (!run) run = { label: s, right };
+    let stack = layer ? last.stack : null;
+    if (!stack) { if (last) settle(last.stack); stack = { run, ink: null, alpha: 0, cap: 0, overlapped: false, lo: base, hi: base }; }
+    if (!stroke) { stack.ink = rgbOf(this.fillStyle); stack.alpha = this.globalAlpha; }   // a gradient face: colour unknown, not judged
+    Object.assign(stack, { after, bw: x1 - x0, bh: y1 - y0, cap: Math.max(stack.cap, cap), lo: Math.min(stack.lo, base), hi: Math.max(stack.hi, base) });
+    const id = calls.push({ s, base, cap, cv, run, left, right, stack }) - 1;
+    let own = owners.get(cv);
+    if (!own) { own = new Int32Array(W * H).fill(-1); owners.set(cv, own); }
+    const hits = new Map(), bw = x1 - x0;
+    for (let i = 0, n = before.length / 4; i < n; i++) {
+      const k = i * 4;
+      if (Math.abs(after[k] - before[k]) + Math.abs(after[k + 1] - before[k + 1]) + Math.abs(after[k + 2] - before[k + 2]) <= 30) continue;
+      const idx = (y0 + Math.floor(i / bw)) * W + x0 + (i % bw), prev = own[idx];
+      if (prev >= frameStart && calls[prev].run !== run && calls[prev].s !== s) hits.set(prev, (hits.get(prev) || 0) + 1);
+      own[idx] = id;
+    }
+    for (const [prev, px] of hits) {          // only lines stacked over each other: letters side by side may touch by design
+      const o = calls[prev], wide = Math.min(o.right - o.left, right - left);
+      const gap = Math.max(0, o.stack.lo - stack.hi, stack.lo - o.stack.hi);
+      const stacked = gap > 0.6 * Math.min(o.cap, cap) && Math.min(o.right, right) - Math.max(o.left, left) > 0.3 * wide;
+      if (stacked && px >= 6) { found.push({ kind: 'overlap', a: o.run, b: run, px }); stack.overlapped = true; }
+    }
+    return result;
+  };
+  // The finished piece of type: its face (the last fill colour) against what is right around each letter after every
+  // layer is drawn, so an outline or a shadow that separates the letters counts. A face that fills its whole box has
+  // nothing around it: the type is lost in a ground of its own colour.
+  function settle(st) {
+    if (!st || st.done) return;
+    st.done = true;
+    if (!st.ink || st.overlapped || st.alpha < 0.85 || st.cap < 6) return;
+    const [ir, ig, ib] = st.ink, li = lum(ir, ig, ib), { after, bw, bh } = st, R = Math.max(3, Math.round(st.cap * 0.12));
+    const face = (xx, yy) => { const k = (yy * bw + xx) * 4; return Math.abs(after[k] - ir) + Math.abs(after[k + 1] - ig) + Math.abs(after[k + 2] - ib) < 48; };
+    let faces = 0, low = 0, all = 0;
+    for (let yy = 0; yy < bh; yy++) for (let xx = 0; xx < bw; xx++) {
+      if (!face(xx, yy)) continue;
+      faces++;
+      if ((xx + yy) % 2) continue;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        let best = 0, edge = false;
+        for (let d = 1; d <= R; d++) {
+          const nx = xx + dx * d, ny = yy + dy * d;
+          if (nx < 0 || ny < 0 || nx >= bw || ny >= bh) break;
+          if (!edge && face(nx, ny)) continue;
+          edge = true;
+          const k = (ny * bw + nx) * 4, lb = lum(after[k], after[k + 1], after[k + 2]);
+          best = Math.max(best, (Math.max(li, lb) + 0.05) / (Math.min(li, lb) + 0.05));
+        }
+        if (edge) { all++; if (best < 2) low++; }
+      }
+    }
+    const share = faces > 0.7 * bw * bh ? 100 : all >= 20 ? Math.round((100 * low) / all) : 0;
+    if (share >= 50) found.push({ kind: 'contrast', run: st.run, share });
+  }
+  P.fillText = watch(P.fillText, false);
+  P.strokeText = watch(P.strokeText, true);
+  window.textCheck = (frame) => {
+    frameStart = calls.length; found = []; window.renderFrame(frame);
+    if (calls.length > frameStart) settle(calls[calls.length - 1].stack);
+    const out = new Map();                       // one finding per line pair (overlap) or line (contrast), the worst kept
+    for (const f of found) {
+      const r = f.kind === 'overlap' ? { kind: 'overlap', a: f.a.label, b: f.b.label, px: f.px } : { kind: 'contrast', s: f.run.label, share: f.share };
+      if (r.kind === 'overlap' && r.a === r.b) continue;
+      const key = r.kind === 'overlap' ? [r.a, r.b].sort().join('\u0000') : 'c\u0000' + r.s, old = out.get(key);
+      if (!old || (r.px ?? r.share) > (old.px ?? old.share)) out.set(key, r);
+    }
+    return [...out.values()];
+  };
+}
+
+// Preview in a normal browser: click renders the soundtrack offline and plays picture and sound together.
+// The audio clock picks the frame; nothing is fed back into the render.
+if (!q.get('capture')) {
+  let frame = 0, playing = false, audio = null, src = null, t0 = 0, offset = 0;
+  const hud = document.getElementById('hud');
+  const stop = () => { if (src) { src.stop(); src = null; } playing = false; };
+  const play = async () => {
+    audio ??= new AudioContext();
+    const buf = await window.renderAudio();
+    src = audio.createBufferSource(); src.buffer = buf; src.connect(audio.destination);
+    offset = frame / FPS; t0 = audio.currentTime; src.start(0, offset); playing = true;
+    src.onended = () => { if (playing) { playing = false; frame = 0; } };
+  };
+  addEventListener('click', () => (playing ? stop() : play()));
+  addEventListener('keydown', (e) => {
+    if (e.code === 'Space') playing ? stop() : play();
+    if (e.code === 'ArrowRight') { stop(); frame = Math.min(FRAMES - 1, frame + 1); }
+    if (e.code === 'ArrowLeft') { stop(); frame = Math.max(0, frame - 1); }
+  });
+  const loop = () => {
+    if (playing) frame = Math.min(FRAMES - 1, Math.floor((audio.currentTime - t0 + offset) * FPS));
+    window.renderFrame(frame);
+    hud.textContent = `${TITLE} · frame ${frame}/${FRAMES - 1} · t=${(frame / FPS).toFixed(2)}s · ${playing ? 'playing' : 'click to play with sound'}`;
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

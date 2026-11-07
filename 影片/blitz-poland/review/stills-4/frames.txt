@@ -1,0 +1,8 @@
+file '/home/user/AI/影片/blitz-poland/review/stills-4/000014.jpg'
+duration 1
+file '/home/user/AI/影片/blitz-poland/review/stills-4/000110.jpg'
+duration 1
+file '/home/user/AI/影片/blitz-poland/review/stills-4/001214.jpg'
+duration 1
+file '/home/user/AI/影片/blitz-poland/review/stills-4/001272.jpg'
+duration 1

@@ -1,0 +1,42 @@
+{
+ "query": "travel poster 1930s railway",
+ "type": "image",
+ "results": [
+  {
+   "source": "aic",
+   "id": "10463",
+   "title": "Futarasan Shrine at Nikko (Nikko Futarasan jinja)",
+   "creator": "Tsuchiya Koitsu",
+   "licence": "cc0",
+   "page": "https://www.artic.edu/artworks/10463",
+   "file": "https://www.artic.edu/iiif/2/f31b0eb0-7c93-21ae-9e50-a729f07c1735/full/3000,/0/default.jpg",
+   "thumb": "https://www.artic.edu/iiif/2/f31b0eb0-7c93-21ae-9e50-a729f07c1735/full/200,/0/default.jpg",
+   "type": "image",
+   "n": 1
+  },
+  {
+   "source": "met",
+   "id": "312268",
+   "title": "Female figure with raised arm",
+   "creator": "Tellem blacksmith",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/312268",
+   "file": "https://images.metmuseum.org/CRDImages/ao/original/DP-16555-006.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/ao/web-large/DP-16555-006.jpg",
+   "type": "image",
+   "n": 2
+  },
+  {
+   "source": "met",
+   "id": "204504",
+   "title": "Seated Hercules in the act of shooting at the stymphalian birds",
+   "creator": "Vittore Gambello",
+   "licence": "cc0",
+   "page": "https://www.metmuseum.org/art/collection/search/204504",
+   "file": "https://images.metmuseum.org/CRDImages/es/original/DP-456-001.jpg",
+   "thumb": "https://images.metmuseum.org/CRDImages/es/web-large/DP-456-001.jpg",
+   "type": "image",
+   "n": 3
+  }
+ ]
+}
