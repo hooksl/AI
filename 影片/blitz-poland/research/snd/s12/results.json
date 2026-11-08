@@ -1,0 +1,85 @@
+{
+ "query": "paper sheet",
+ "type": "sound",
+ "results": [
+  {
+   "source": "wikimedia",
+   "id": "23994945",
+   "title": "Book paper pages assorted.ogg",
+   "creator": "stephan",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Book_paper_pages_assorted.ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/7/79/Book_paper_pages_assorted.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 1
+  },
+  {
+   "source": "wikimedia",
+   "id": "149550734",
+   "title": "Hy-\u0534\u0561\u057f\u0561\u0580\u056f \u0569\u0578\u0582\u0572\u0569 (Blank piece of paper).ogg",
+   "creator": "Speaker: Lusine Hakobyan Authors of the article",
+   "licence": "cc-by-sa",
+   "page": "https://commons.wikimedia.org/wiki/File:Hy-%D4%B4%D5%A1%D5%BF%D5%A1%D6%80%D5%AF_%D5%A9%D5%B8%D6%82%D5%B2%D5%A9_(Blank_piece_of_paper).ogg",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/d/d0/Hy-%D4%B4%D5%A1%D5%BF%D5%A1%D6%80%D5%AF_%D5%A9%D5%B8%D6%82%D5%B2%D5%A9_%28Blank_piece_of_paper%29.ogg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+   "licence_name": "CC BY-SA 4.0",
+   "n": 2
+  },
+  {
+   "source": "wikimedia",
+   "id": "145540774",
+   "title": "\"Brown Paper\", by George Bryer (1912).oga",
+   "creator": "George Bryer",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:%22Brown_Paper%22,_by_George_Bryer_(1912).oga",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/d/d9/%22Brown_Paper%22%2C_by_George_Bryer_%281912%29.oga?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 3
+  },
+  {
+   "source": "wikimedia",
+   "id": "73510098",
+   "title": "Paper Radio - Introduction.opus",
+   "creator": "Paper Radio",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Paper_Radio_-_Introduction.opus",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/4/41/Paper_Radio_-_Introduction.opus?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 4
+  },
+  {
+   "source": "wikimedia",
+   "id": "73545316",
+   "title": "Paper Radio - Typewriters.opus",
+   "creator": "Paper Radio",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Paper_Radio_-_Typewriters.opus",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Paper_Radio_-_Typewriters.opus?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 5
+  },
+  {
+   "source": "wikimedia",
+   "id": "73570089",
+   "title": "Paper Radio - Opuntia.opus",
+   "creator": "Paper Radio",
+   "licence": "pd",
+   "page": "https://commons.wikimedia.org/wiki/File:Paper_Radio_-_Opuntia.opus",
+   "file": "https://upload.wikimedia.org/wikipedia/commons/5/59/Paper_Radio_-_Opuntia.opus?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+   "thumb": null,
+   "type": "sound",
+   "licence_name": "Public domain",
+   "n": 6
+  }
+ ]
+}

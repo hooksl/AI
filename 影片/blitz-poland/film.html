@@ -140,8 +140,7 @@ const SFX = [
   { at: CUES.hoist + 0.18, voice: 'foley', kind: 'tap', gain: 0.3, wet: 0.3 },
   { at: CUES.hoist + 1.6, voice: 'foley', kind: 'tap', gain: 0.35, wet: 0.3 },
   { at: CUES.turn, voice: 'foley', kind: 'cloth', gain: 0.4, wet: 0.2 },
-  { at: CUES.east, voice: 'hit', gain: 0.9, wet: 0.5 },
-  { at: CUES.east + 0.5, voice: 'tick', gain: 0.1, wet: 0.2 },
+  { at: CUES.east, voice: 'hit', gain: 0.6, wet: 0.5 },
   { at: CUES.chords[0], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
   { at: CUES.chords[1], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
   { at: CUES.chords[2], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
@@ -257,6 +256,7 @@ function contour(g, s, w = 2) {               // fine toward the light, heavier 
   g.clip(out, 'evenodd'); g.translate(w * 0.45, w * 0.55); g.lineWidth = w; g.stroke(s.p); g.restore();
 }
 const FAMS = [[0, 0.12, 1, 1], [57, 0.47, 0.84, 1.1], [-38, 0.76, 0.68, 1.28]];
+let SPSCALE = 1;                               // > 1 while something is drawn at a small scale
 // engrave(g, shape, { angle, tone, sp, w, wash, washA, line, knock, fams, phase })
 function engrave(g, s, o = {}) {
   const tone = typeof o.tone === 'function' ? o.tone : TN.flat(o.tone ?? 0.4);
@@ -264,7 +264,7 @@ function engrave(g, s, o = {}) {
   if (o.knock !== false) { g.fillStyle = o.knock || PAPER; g.fill(s.p); }
   if (o.wash) wash(g, s, o.wash, o.washA ?? 0.6);
   g.clip(s.p); g.beginPath();
-  const a = o.angle ?? 35, sp = o.sp ?? 6.4, w = o.w ?? 2.7;
+  const a = o.angle ?? 35, sp = (o.sp ?? 6.4) * SPSCALE, w = (o.w ?? 2.7) * SPSCALE;
   for (const [da, th, wk, sk] of o.fams ?? FAMS) hatchLines(g, s.b, a + da, sp * sk, w * wk, th, tone, o.phase ?? 0);
   g.fillStyle = INK; g.fill(); g.restore();
   if (o.line) contour(g, s, o.line);
@@ -308,9 +308,9 @@ function caption(g, S, latin, zh, k, o = {}) {
   const x = o.x ?? 96, y = o.y ?? 968, al = o.align ?? 'left';
   if (k > 0) {                                // a deckled paper slip laid down under the words
     g.save(); g.setTransform(S.W / DW, 0, 0, S.W / DW, 0, 0);
-    setType(g, TYPE, 'display', 60, { weight: 600, short: DH }); const wz = [...(zh || '')].length * 60 * 1.08;
-    setType(g, TYPE, 'text', 34, { weight: 500, short: DH }); g.letterSpacing = '0px'; const wl = g.measureText(latin || '').width + [...(latin || '')].length * 34 * 0.34 + 40;
-    const w = Math.max(wz, wl) + 64, h = 170, x0 = al === 'center' ? x - w / 2 : al === 'right' ? x - w + 32 : x - 32, y0 = y - 132;
+    setType(g, TYPE, 'display', 80, { weight: 600, short: DH }); const wz = [...(zh || '')].length * 80 * 1.08;
+    setType(g, TYPE, 'text', 44, { weight: 500, short: DH }); g.letterSpacing = '0px'; const wl = g.measureText(latin || '').width + [...(latin || '')].length * 44 * 0.3 + 40;
+    const w = Math.max(wz, wl) + 64, h = 212, x0 = al === 'center' ? x - w / 2 : al === 'right' ? x - w + 32 : x - 32, y0 = y - 168;
     const r = rng(31), pts = [], lay = EASE.out(clamp(k * 3));
     for (let i = 0; i <= 20; i++) pts.push([x0 + (w * i) / 20, y0 + (r() - 0.5) * 3]);
     for (let i = 0; i <= 8; i++) pts.push([x0 + w + (r() - 0.5) * 3, y0 + (h * i) / 8]);
@@ -321,8 +321,20 @@ function caption(g, S, latin, zh, k, o = {}) {
     g.fillStyle = '#f4ecd8'; g.fill(SH.poly(pts).p); g.strokeStyle = INK; g.lineWidth = 1; g.stroke(SH.poly(pts).p);
     g.restore();
   }
-  if (latin) cutText(g, S, latin, x, y - 74, 34, clamp(k * 1.6), { role: 'text', align: al, track: 0.2 });
-  if (zh) cutText(g, S, zh, x, y, 60, clamp(k * 1.6 - 0.35), { role: 'display', align: al });
+  if (latin) cutText(g, S, latin, x, y - 96, 44, clamp(k * 1.6), { role: 'text', align: al, track: 0.16 });
+  if (zh) cutText(g, S, zh, x, y, 80, clamp(k * 1.6 - 0.35), { role: 'display', align: al });
+}
+// static layers are engraved once into an offscreen sheet at the largest zoom they are seen at, then laid each frame
+const LAYERS = new Map();
+function cached(g, S, key, box, zmax, draw) {
+  let L = LAYERS.get(key);
+  if (!L) {
+    const [x0, y0, x1, y1] = box, sc = (S.W / DW) * zmax, c = document.createElement('canvas');
+    c.width = Math.ceil((x1 - x0) * sc); c.height = Math.ceil((y1 - y0) * sc);
+    const cg = c.getContext('2d'); cg.setTransform(sc, 0, 0, sc, -x0 * sc, -y0 * sc); draw(cg);
+    L = { c, box }; LAYERS.set(key, L);
+  }
+  const [x0, y0, x1, y1] = L.box; g.drawImage(L.c, x0, y0, x1 - x0, y1 - y0);
 }
 function plateFrame(g, S) {                   // the plate mark: a pressed rule and a hairline, fixed to the sheet's edge
   g.save(); g.setTransform(S.W / DW, 0, 0, S.W / DW, 0, 0); g.strokeStyle = INK;
@@ -362,24 +374,28 @@ function crateNailed(g, k, t, S) {
   const nails = [CUES.nail1, CUES.nail2, CUES.nail3], hitAge = Math.min(...nails.map((c) => (t >= c ? t - c : 9)));
   const jolt = hitAge < 0.25 ? Math.sin(hitAge * 60) * 6 * (1 - hitAge / 0.25) : 0;
   stage(g, S, { ...cam, y: cam.y + jolt * 0.4 });
+  const X0 = -620, Y0 = -330, CW = 1240, CH = 660, rim = 46;
+  cached(g, S, 's1base', [-1300, -800, 1300, 800], 1.12, (g) => {
   // the vault floor, lit by one lamp above the crate
   engrave(g, SH.rect(-1300, -800, 2600, 1600), { tone: TN.pool(-60, -40, 980, 0.32, 1.0), angle: 0, sp: 6.6, w: 3, knock: false });
   for (let j = -6; j <= 6; j++) { g.save(); g.fillStyle = INK; g.globalAlpha = 0.55; g.fillRect(-1300, j * 120 - 2, 2600, 3); g.restore(); }
   // the crate: rim boards and its shadow
   engrave(g, SH.poly([[-600, -320], [660, -320], [700, 360], [-560, 360]]), { tone: 0.9, angle: -20, sp: 5.4, knock: false });
-  const X0 = -620, Y0 = -330, CW = 1240, CH = 660, rim = 46;
   engrave(g, SH.rect(X0 + rim, Y0 + rim, CW - 2 * rim, CH - 2 * rim), { tone: 0.78, angle: 90, sp: 5.6, line: 2 });
   for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++)
     goldBar(g, X0 + rim + 14 + col * 188, Y0 + rim + 18 + row * 140, 172, 118, row * 6 + col + 1);
   plank(g, X0, Y0, CW, rim, 3, 0.36); plank(g, X0, Y0 + CH - rim, CW, rim, 4, 0.5);
   g.save(); g.translate(X0, Y0); g.rotate(Math.PI / 2); plank(g, 0, -rim, CH, rim, 5, 0.34); g.restore();
   g.save(); g.translate(X0 + CW, Y0); g.rotate(Math.PI / 2); plank(g, 0, 0, CH, rim, 6, 0.52); g.restore();
+  });
   // the lid: three boards and two battens slide in from the right, fastest at frame 0
   const lx = lerp(1300, 0, EASE.inOut(clamp((t - CUES.lid) / 1.3))) + jolt;
   g.save(); g.translate(lx, 0);
-  engrave(g, SH.rect(X0 + 26, Y0 + 30, CW, CH), { tone: 0.94, angle: -30, sp: 5, knock: false });   // its shadow
-  for (let b = 0; b < 3; b++) plank(g, X0, Y0 + b * (CH / 3), CW, CH / 3, 20 + b, 0.3 + b * 0.05);
-  for (const bx of [X0 + 120, X0 + CW - 190]) plank(g, bx, Y0 - 6, 70, CH + 12, 30 + bx, 0.46);
+  cached(g, S, 's1lid', [X0 - 10, Y0 - 16, X0 + CW + 40, Y0 + CH + 40], 1.12, (g) => {
+    engrave(g, SH.rect(X0 + 26, Y0 + 30, CW, CH), { tone: 0.94, angle: -30, sp: 5, knock: false });   // its shadow
+    for (let b = 0; b < 3; b++) plank(g, X0, Y0 + b * (CH / 3), CW, CH / 3, 20 + b, 0.3 + b * 0.05);
+    for (const bx of [X0 + 120, X0 + CW - 190]) plank(g, bx, Y0 - 6, 70, CH + 12, 30 + bx, 0.46);
+  });
   // stencil, cut letter by letter once the nails are in
   cutText(g, S, 'BANK POLSKI', X0 + CW / 2, Y0 + CH / 2 + 34, 92, clamp((t - CUES.stencil) / 0.7), { role: 'text', weight: 700, world: true, align: 'center', track: 0.18, color: '#2a1d14' });
   // nail heads appear on their strike
@@ -461,6 +477,7 @@ function brestParade(g, k, t, S) {
   const dz = 1 + 0.16 * EASE.inOut(clamp((t - 49.5) / 3));
   stage(g, S, cam);
   camView(g, S, cam, 0.6, dz);
+  cached(g, S, 's7far', [-1300, -800, 1300, 80], 1.2, (g) => {
   engrave(g, SH.rect(-1300, -800, 2600, 760), { tone: TN.vgrad(-560, -40, 0.1, 0.34), angle: 0, sp: 7, w: 2, knock: false, fams: [[0, 0.12, 1, 1]] });  // cold sky
   // the town: a row of facades with windows
   const r = rng(77);
@@ -475,17 +492,13 @@ function brestParade(g, k, t, S) {
     }
     fx += fw + 6;
   }
+  });
   camView(g, S, cam);
+  cached(g, S, 's7near', [-1300, -480, 1300, 840], 1.03, (g) => {
   // the square
   engrave(g, SH.rect(-1300, 40, 2600, 800), { tone: TN.vgrad(40, 540, 0.24, 0.5), angle: 4, sp: 6.4, w: 2.4, knock: false, fams: [[0, 0.12, 1, 1], [57, 0.47, 0.8, 1.1]] });
   // flags: two poles, one red for both
-  for (const [px, ph, dir] of [[-440, 0, -1], [440, 1.7, 1]]) {
-    engrave(g, SH.rect(px - 7, -470, 14, 680), { tone: TN.lit(px, 0, 20, 0.4, 0.4), angle: 90, sp: 4, w: 1.6, line: 1.4 });
-    g.save(); g.translate(px, 0); g.scale(dir, 1);
-    const f = flag(7, -458, 270, 170, t, ph);
-    engrave(g, f.s, { tone: f.tone, angle: 70, sp: 5.2, w: 2.2, wash: PALETTE.red, washA: 0.78, line: 1.8 });
-    g.restore();
-  }
+  for (const px of [-440, 440]) engrave(g, SH.rect(px - 7, -470, 14, 680), { tone: TN.lit(px, 0, 20, 0.4, 0.4), angle: 90, sp: 4, w: 1.6, line: 1.4 });
   // soldiers in ranks on both sides
   engrave(g, soldierRow(16, -960, -560, 168, 74), { tone: 0.78, angle: 80, sp: 4.2, w: 1.8, line: 1 });
   engrave(g, soldierRow(16, 560, 960, 168, 74), { tone: 0.78, angle: 80, sp: 4.2, w: 1.8, line: 1 });
@@ -496,6 +509,13 @@ function brestParade(g, k, t, S) {
   engrave(g, SH.rect(-270, -46, 540, 10), { tone: 0.35, angle: 0, sp: 4, w: 1.6, line: 1.2 });
   engrave(g, figure(-60, 18, 120, false), { tone: 0.84, angle: 75, sp: 3.8, w: 1.8, line: 1.2 });
   engrave(g, figure(60, 18, 124, true), { tone: 0.84, angle: 105, sp: 3.8, w: 1.8, line: 1.2 });
+  });
+  for (const [px, ph, dir] of [[-440, 0, -1], [440, 1.7, 1]]) {
+    g.save(); g.translate(px, 0); g.scale(dir, 1);
+    const f = flag(7, -458, 270, 170, t, ph);
+    engrave(g, f.s, { tone: f.tone, angle: 70, sp: 5.2, w: 2.2, wash: PALETTE.red, washA: 0.78, line: 1.8 });
+    g.restore();
+  }
   // the column: one tank on each chord, the two armies taking turns
   const v = 760;
   CUES.chords.forEach((c, i) => {
@@ -554,11 +574,14 @@ function convoyNight(g, k, t, S) {
   const lt = t - CUES.road, cam = { x: 260 * lt, y: 110, z: 1 };
   stage(g, S, cam);
   camView(g, S, cam, 0.15);
-  engrave(g, SH.rect(-1300 + cam.x * 0.15, -800, 2600, 900), { tone: TN.vgrad(-560, 60, 0.92, 0.72, 0.05), angle: 0, sp: 6.4, w: 2.8, knock: false });   // night sky
+  g.save(); g.translate(cam.x * 0.15, 0);
+  cached(g, S, 's2sky', [-1300, -800, 1300, 100], 1, (g) => engrave(g, SH.rect(-1300, -800, 2600, 900), { tone: TN.vgrad(-560, 60, 0.92, 0.72, 0.05), angle: 0, sp: 6.4, w: 2.8, knock: false }));   // night sky
+  g.restore();
   camView(g, S, cam, 0.35);
-  const r = rng(8), x0 = Math.floor((cam.x * 0.35 - 1400) / 90) * 90;
-  const hills = []; for (let x = x0; x < x0 + 2900; x += 30) hills.push([x, -40 - 50 * noise1(x * 0.004 + 2) - 30 * noise1(x * 0.02)]);
-  engrave(g, SH.poly([...hills, [x0 + 2900, 200], [x0, 200]]), { tone: 0.8, angle: 15, sp: 5.6, w: 2.6, line: 1.6 });                     // far ridge
+  cached(g, S, 's2ridge', [-1500, -200, 2500, 210], 1, (g) => {
+    const hills = []; for (let x = -1500; x <= 2500; x += 30) hills.push([x, -40 - 50 * noise1(x * 0.004 + 2) - 30 * noise1(x * 0.02)]);
+    engrave(g, SH.poly([...hills, [2500, 200], [-1500, 200]]), { tone: 0.8, angle: 15, sp: 5.6, w: 2.6, line: 1.6 });                     // far ridge
+  });
   // a plane far up, crossing before the first bomb (no siren: a drone in the score)
   const pa = clamp((t - 5.6) / 2.4);
   if (pa > 0 && pa < 1) { const px = cam.x * 0.35 - 900 + pa * 1800, py = -380 + pa * 40; g.save(); g.translate(px, py);
@@ -566,13 +589,17 @@ function convoyNight(g, k, t, S) {
     engrave(g, SH.poly([[-6, -2], [20, -2], [6, -44], [-6, -44]]), { tone: 0.9, angle: 0, sp: 3, line: 1.2 });
     engrave(g, SH.poly([[-6, 2], [20, 2], [6, 30], [-6, 30]]), { tone: 0.9, angle: 0, sp: 3, line: 1.2 }); g.restore(); }
   camView(g, S, cam, 0.7);
-  for (let i = Math.floor((cam.x * 0.7 - 1300) / 230); i < Math.floor((cam.x * 0.7 + 1300) / 230); i++) {   // poplars along the verge
+  cached(g, S, 's2poplars', [-1400, -320, 2800, 160], 1, (g) => {
+  for (let i = -6; i < 12; i++) {   // poplars along the verge
     const tx = i * 230 + hash1(i) * 60, th = 300 + hash1(i + 50) * 120;
     engrave(g, SH.ellipse(tx, 120 - th / 2, 34 + hash1(i + 5) * 10, th / 2), { tone: TN.lit(tx, 120 - th / 2, 60, 0.72, 0.25), angle: 80, sp: 4.6, w: 2.2, line: 1.4 });
     engrave(g, SH.rect(tx - 5, 110, 10, 40), { tone: 0.8, angle: 90, sp: 3, w: 1.4 });
   }
+  });
   camView(g, S, cam);
-  engrave(g, SH.rect(cam.x - 1300, 140, 2600, 700), { tone: TN.vgrad(140, 540, 0.7, 0.86), angle: 3, sp: 6, w: 2.6, knock: false });   // the road
+  g.save(); g.translate(cam.x, 0);
+  cached(g, S, 's2road', [-1300, 140, 1300, 840], 1, (g) => engrave(g, SH.rect(-1300, 140, 2600, 700), { tone: TN.vgrad(140, 540, 0.7, 0.86), angle: 3, sp: 6, w: 2.6, knock: false }));   // the road
+  g.restore();
   const blasts = [CUES.bomb1, CUES.bomb2, CUES.bomb3];
   blasts.forEach((c, i) => blast(g, 260 * (c - CUES.road) + 760 + i * 40, 210, t - c));
   const sw = Math.sin(clamp((t - CUES.swerve) / 1.2) * Math.PI) * 46;          // the swerve round the second crater
@@ -615,7 +642,7 @@ function mapPlate(g, S, t, o) {               // o: { west 0..1, east 0..1, rout
   const pl = SH.poly(POLAND.map(([a, b]) => geo(a, b)));
   engrave(g, pl, { tone: TN.lit(0, 0, 400, 0.13, 0.08, 0.04), angle: 0, sp: 6, w: 1.4, line: 2.6 });
   // the fronts: hatching that presses in from the west (and later the east), its edge ragged like a cut not yet cleaned
-  const wx = lerp(-480, 60, o.west), ex = lerp(520, 60, o.east);
+  const wx = lerp(-480, 60, o.west), ex = lerp(520, -80, o.east);
   if (o.west > 0 || o.east > 0) engrave(g, pl, { knock: false, angle: -30, sp: 5.2, w: 2.8,
     tone: (x, y) => { const j = 40 * (noise1(y * 0.02 + 4) - 0.5); return Math.max(o.west > 0 ? 0.92 * clamp((wx + j - x) / 60) : 0, o.east > 0 ? 0.92 * clamp((x - ex - j) / 60) : 0); } });
   // the route: cut by the burin, the gold point riding at its tip (the signature)
@@ -623,8 +650,8 @@ function mapPlate(g, S, t, o) {               // o: { west 0..1, east 0..1, rout
   if (pts.length > 1) { g.save(); g.strokeStyle = INK; g.lineWidth = 5; g.setLineDash([16, 9]); g.lineCap = 'round'; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); g.restore(); }
   for (const [name, [a, b]] of Object.entries(CITIES)) {
     const [x, y] = geo(a, b); engrave(g, SH.circle(x, y, 9), { tone: 0.8, angle: 0, sp: 2.4, w: 1.4, line: 1.2 });
-    const lo = name === 'BRZEŚĆ' ? [16, 30] : name === 'WARSZAWA' ? [-16, -14] : [16, -12];
-    cutText(g, S, name, x + lo[0], y + lo[1], 24, 1, { role: 'text', world: true, track: 0.14, weight: 700, align: lo[0] < 0 ? 'right' : 'left' });
+    const lo = name === 'BRZEŚĆ' ? [18, -14] : name === 'WARSZAWA' ? [-18, -14] : name === 'LUBLIN' ? [-18, 34] : name === 'ŁUCK' ? [18, 34] : [18, -12];
+    cutText(g, S, name, x + lo[0], y + lo[1], 30, 1, { role: 'text', world: true, track: 0.14, weight: 700, align: lo[0] < 0 ? 'right' : 'left' });
   }
   const tip = pts[pts.length - 1];
   if (o.dot) {
@@ -637,25 +664,27 @@ function mapPlate(g, S, t, o) {               // o: { west 0..1, east 0..1, rout
     }
   }
   cutText(g, S, 'ROMÂNIA', geo(26.3, 46.6)[0], geo(26.3, 46.6)[1], 30, 1, { role: 'text', world: true, track: 0.3, align: 'center', weight: 700 });
-  cutText(g, S, 'POLSKA', geo(20.4, 50.6)[0], geo(20.4, 50.6)[1], 34, 1, { role: 'text', world: true, track: 0.4, align: 'center', weight: 700 });
+  cutText(g, S, 'POLSKA', geo(18.9, 53.5)[0], geo(18.9, 53.5)[1], 34, 1, { role: 'text', world: true, track: 0.4, align: 'center', weight: 700 });
   g.restore();
   return tip;
 }
 function routeCut(g, k, t, S) {
   // pull-back reveal, 3 s, ease-out, from the gold point at Warsaw to the whole plate, then a held loupe
-  const w = geo(21.0, 52.23), pk = EASE.out(clamp((t - CUES.map) / 3));
-  const cam = { x: lerp(w[0], 0, pk), y: lerp(w[1], 0, pk), z: lerp(2.6, 1.02, pk) };
+  const w = geo(21.0, 52.23), pk = EASE.out(clamp((t - CUES.map) / 2.6)), ru = EASE.inOut(clamp((t - CUES.map - 0.6) / 8.2));
+  const tip = routeAt(ru).at(-1), fk = EASE.inOut(clamp((t - CUES.map - 3.0) / 2.6));   // then the loupe rides with the burin
+  const cam = { x: lerp(lerp(w[0], 0, pk), tip[0] * 0.55, fk), y: lerp(lerp(w[1], 0, pk), tip[1] * 0.55, fk), z: lerp(lerp(2.6, 1.02, pk), 1.32, fk) };
   stage(g, S, cam);
-  mapPlate(g, S, t, { west: 0.55 * EASE.inOut(clamp((t - CUES.west) / 5.5)), east: 0, route: EASE.inOut(clamp((t - CUES.map - 0.6) / 8.2)), romania: 0, dot: true });
+  mapPlate(g, S, t, { west: 0.62 * EASE.inOut(clamp((t - CUES.west) / 6.2)), east: 0, route: ru, romania: 0, dot: true });
   caption(g, S, '1.IX.1939', '西线', clamp((t - CUES.west + 0.2) / 1.4));
   plateFrame(g, S);
 }
 function eastCloses(g, k, t, S) {
   // locked frame on the plate; the east front closes the road the gold took, in silence
-  stage(g, S, { x: 0, y: 0, z: 1.02 });
-  const tip = mapPlate(g, S, t, { west: 0.55 + 0.45 * EASE.inOut(clamp((t - CUES.turn) / 5.2)), east: EASE.out(clamp((t - CUES.east) / 1.8)), route: 1, romania: 1, dot: false });
+  const c0 = geo(25.0, 49.9), pz = EASE.inOut(clamp((t - CUES.turn) / 6));
+  stage(g, S, { x: c0[0] * 0.8 + 20 * pz, y: c0[1] * 0.8 - 30 * pz, z: lerp(1.55, 1.9, pz) });
+  const tip = mapPlate(g, S, t, { west: 0.55 + 0.45 * EASE.inOut(clamp((t - CUES.turn) / 5.2)), east: EASE.out(clamp((t - CUES.east) / 2.6)), route: 1, romania: 1, dot: false });
   burst(g, geo(27.4, 51.2)[0], geo(27.4, 51.2)[1], (t - CUES.east) / 0.4, 30, 160, 13, 3);
-  caption(g, S, '17.IX.1939', '东线', clamp((t - CUES.east - 0.2) / 1.4), { x: 1824, align: 'right' });
+  caption(g, S, '17.IX.1939', '东线', clamp((t - CUES.east - 0.2) / 1.4), { x: 1824, align: 'right', y: 250 });
   plateFrame(g, S);
 }
 
@@ -694,16 +723,19 @@ function borderBridge(g, k, t, S) {
   const cam = { x: lerp(-560, 380, EASE.inOut(k)), y: lerp(170, 70, EASE.inOut(k)), z: lerp(1.12, 1.0, EASE.inOut(k)) };
   stage(g, S, cam);
   camView(g, S, cam, 0.4);
+  cached(g, S, 's4far', [-1500, -900, 1900, 200], 1.08, (g) => {
   engrave(g, SH.rect(-1500, -900, 3400, 1000), { tone: (x, y) => 0.12 + 0.5 * clamp((x + 1300) / 3000) * clamp((y + 900) / 900 + 0.3), angle: 0, sp: 6, w: 2.2, knock: false });  // dusk sky, light low in the west
   engrave(g, SH.circle(-900, 30, 70), { tone: 0.02, knock: '#fbf2da', angle: 0, line: 1 });                                             // the sun going down
   const hill = []; for (let x = -1500; x <= 1900; x += 40) hill.push([x, 40 - 60 * noise1(x * 0.003 + 7)]);
   engrave(g, SH.poly([...hill, [1900, 200], [-1500, 200]]), { tone: 0.62, angle: 20, sp: 5.4, w: 2.2, line: 1.4 });
+  });
   camView(g, S, cam);
-  // the river below the bridge, light on it from the west
-  engrave(g, SH.rect(-400, 260, 1500, 500), { tone: (x, y) => 0.4 + 0.3 * clamp((x + 400) / 1500) + 0.1 * Math.sin(y * 0.3 + t * 2), angle: 0, sp: 5.4, w: 2.4, knock: false });
-  engrave(g, SH.poly([[-1800, 200], [-400, 200], [-340, 760], [-1800, 760]]), { tone: TN.lit(-1000, 400, 600, 0.55, 0.2), angle: 30, sp: 5.6, w: 2.4, line: 2 });   // home bank
   const bw0 = clamp((t - CUES.border) / 0.9);
   engrave(g, SH.poly([[1000, 200], [2400, 200], [2400, 760], [1060, 760]]), { tone: TN.lit(1600, 400, 600, 0.58, 0.2), angle: -30, sp: 5.6, w: 2.4, line: 2, wash: bw0 > 0 ? PALETTE.dim : null, washA: 0.75 * bw0 });  // far bank: Romania
+  cached(g, S, 's4near', [-1800, -340, 1080, 760], 1.12, (g) => {
+  // the river below the bridge, light on it from the west
+  engrave(g, SH.rect(-400, 260, 1440, 500), { tone: (x, y) => 0.4 + 0.3 * clamp((x + 400) / 1500) + 0.1 * Math.sin(y * 0.3), angle: 0, sp: 5.4, w: 2.4, knock: false });
+  engrave(g, SH.poly([[-1800, 200], [-400, 200], [-340, 760], [-1800, 760]]), { tone: TN.lit(-1000, 400, 600, 0.55, 0.2), angle: 30, sp: 5.6, w: 2.4, line: 2 });   // home bank
   // the station platform and its lamp
   engrave(g, SH.rect(-1800, 120, 1300, 80), { tone: TN.lit(-1100, 160, 400, 0.4, 0.2), angle: 0, sp: 5, w: 2.2, line: 1.8 });
   engrave(g, SH.rect(-1400, -320, 16, 440), { tone: 0.7, angle: 90, sp: 3, w: 1.6, line: 1.4 });
@@ -718,6 +750,7 @@ function borderBridge(g, k, t, S) {
     engrave(g, SH.rect(x0 - 5, -14, 10, 200), { tone: 0.6, angle: 90, sp: 3, w: 1.4, line: 1.2 });
   }
   engrave(g, SH.rect(-410, -24, 1460, 18), { tone: 0.6, angle: 0, sp: 3.4, w: 1.8, line: 1.6 });
+  });
   // the border post on the far bank: striped barrier and sentry box; Romania's wash blooms when the train reaches it
   const bw = clamp((t - CUES.border) / 0.8);
   engrave(g, SH.poly([[1060, 190], [1060, 40], [1090, 10], [1120, 40], [1120, 190]]), { tone: TN.lit(1090, 100, 60, 0.4, 0.3), angle: 90, sp: 4, w: 1.8, line: 1.6, wash: bw > 0 ? PALETTE.dim : null, washA: 0.7 * bw });
@@ -745,7 +778,7 @@ function gull(g, x, y, t, s = 1) {
   g.moveTo(x - 22 * s, y - (8 + 10 * f) * s); g.quadraticCurveTo(x - 9 * s, y - (12 + 6 * f) * s, x, y); g.quadraticCurveTo(x + 9 * s, y - (12 + 6 * f) * s, x + 22 * s, y - (8 + 10 * f) * s); g.stroke(); g.restore();
 }
 function ship(g, x, y, t, s = 1) {            // a tanker in profile: raised bow and poop, bridge amidships, one funnel aft
-  g.save(); g.translate(x, y); g.scale(s, s);
+  g.save(); g.translate(x, y); g.scale(s, s); const keep = SPSCALE; SPSCALE = Math.max(1, 0.8 / s);
   engrave(g, SH.poly([[-520, -40], [480, -40], [560, -90], [540, 20], [470, 70], [-470, 70], [-540, -10]]), { tone: TN.lit(0, 0, 500, 0.62, 0.18), angle: 0, sp: 5, w: 2.6, line: 2.4 });
   engrave(g, SH.rect(-520, 20, 1000, 12), { tone: 0.3, angle: 0, sp: 3, w: 1.4, knock: false });
   engrave(g, SH.rect(-70, -130, 150, 92), { tone: TN.lit(0, -90, 100, 0.4, 0.3), angle: 90, sp: 4.4, w: 2, line: 1.8 });
@@ -754,29 +787,33 @@ function ship(g, x, y, t, s = 1) {            // a tanker in profile: raised bow
   engrave(g, SH.poly([[-410, -100], [-350, -100], [-356, -190], [-404, -190]]), { tone: TN.lit(-380, -150, 40, 0.5, 0.4), angle: 90, sp: 3.6, w: 1.8, line: 1.6 });
   engrave(g, SH.rect(380, -260, 8, 220), { tone: 0.7, angle: 90, sp: 2, w: 1.2, line: 1 });
   engrave(g, SH.rect(20, -280, 8, 150), { tone: 0.7, angle: 90, sp: 2, w: 1.2, line: 1 });
-  g.restore();
+  SPSCALE = keep; g.restore();
 }
 function portDawn(g, k, t, S) {
   // dolly out, 8.8 s, ease-in-out, from the crane's load to the harbour mouth
   const cam = { x: lerp(-60, 200, EASE.inOut(k)), y: lerp(-80, 0, EASE.inOut(k)), z: lerp(1.28, 0.98, EASE.inOut(k)) };
   stage(g, S, cam);
   camView(g, S, cam, 0.3);
+  cached(g, S, 's5far', [-1400, -900, 1400, 110], 1.2, (g) => {
   engrave(g, SH.rect(-1400, -900, 2800, 1000), { tone: TN.vgrad(-600, 80, 0.36, 0.1), angle: 0, sp: 6.6, w: 2, knock: false, fams: [[0, 0.12, 1, 1]] });   // dawn sky
   engrave(g, SH.poly([[-1400, 60], [-600, 30], [200, 50], [1400, 40], [1400, 110], [-1400, 110]]), { tone: 0.26, angle: 0, sp: 5, w: 1.6, line: 1 });            // far shore in haze
+  });
   camView(g, S, cam);
+  cached(g, S, 's5near', [-1500, -360, 1500, 900], 1.3, (g) => {
   const sea = SH.rect(-1500, 100, 3000, 800);
-  engrave(g, sea, { tone: (x, y) => 0.3 + 0.25 * clamp((y - 100) / 500) + 0.12 * Math.sin(x * 0.03 + y * 0.2 + t * 1.5), angle: 0, sp: 5.4, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.5 });
+  engrave(g, sea, { tone: (x, y) => 0.3 + 0.25 * clamp((y - 100) / 500) + 0.12 * Math.sin(x * 0.03 + y * 0.2), angle: 0, sp: 5.4, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.5 });
   // the quay and its bollards
   engrave(g, SH.rect(-1500, 230, 1180, 600), { tone: TN.lit(-900, 400, 600, 0.5, 0.2), angle: 30, sp: 5.4, w: 2.4, line: 2.2 });
   for (const bx of [-1100, -700]) engrave(g, SH.round(bx, 196, 40, 40, 10), { tone: 0.6, angle: 0, sp: 3, w: 1.6, line: 1.4 });
+  engrave(g, SH.poly([[-780, 230], [-700, 230], [-720, -340], [-760, -340]]), { tone: TN.lit(-740, 0, 80, 0.55, 0.3), angle: 90, sp: 4, w: 2, line: 1.8 });
+  for (let i = 0; i < 8; i++) { const yy = 200 - i * 70; g.save(); g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(-772 + i * 1.4, yy); g.lineTo(-708 - i * 1.4, yy - 70); g.stroke(); g.restore(); }
+  });
   // the ship pulls out after the horn
   const sx = 260 + Math.max(0, t - CUES.horn) ** 1.6 * 34;
   ship(g, sx, 180, t, 0.9);
   for (let i = 0; i < 5; i++) { const ph = (t * 0.5 + i / 5) % 1; engrave(g, SH.circle(sx - 340 - ph * 260, 180 - 190 - ph * 160, 20 + ph * 60), { tone: 0.5 * (1 - ph), angle: 50, sp: 5, w: 1.8, knock: false }); }  // funnel smoke
   // the crane: tower, jib swinging over the hold, the crate load on its cable
   const swing = EASE.inOut(clamp((t - CUES.hoist) / 3.2)), lift = Math.sin(clamp((t - CUES.hoist) / 3.4) * Math.PI);
-  engrave(g, SH.poly([[-780, 230], [-700, 230], [-720, -340], [-760, -340]]), { tone: TN.lit(-740, 0, 80, 0.55, 0.3), angle: 90, sp: 4, w: 2, line: 1.8 });
-  for (let i = 0; i < 8; i++) { const yy = 200 - i * 70; g.save(); g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.moveTo(-772 + i * 1.4, yy); g.lineTo(-708 - i * 1.4, yy - 70); g.stroke(); g.restore(); }
   const ja = lerp(-0.25, 0.08, swing), L = 760, jx = -740 + Math.cos(ja) * L, jy = -330 + Math.sin(ja) * L * 0.3;
   g.save(); g.strokeStyle = INK; g.lineWidth = 9; g.beginPath(); g.moveTo(-740, -330); g.lineTo(jx, jy); g.stroke(); g.lineWidth = 2; g.beginPath(); g.moveTo(-740, -420); g.lineTo(jx, jy); g.stroke();
   const cy = lerp(160, -40, lift) - 40 * swing;
@@ -793,10 +830,12 @@ function seaGlint(g, k, t, S) {
   // dolly out, 3.95 s, slow ease-out, on the horizon; the title cut glyph by glyph above it
   const cam = { x: 0, y: 0, z: lerp(1.12, 1, EASE.out(k)) };
   stage(g, S, cam);
+  cached(g, S, 's8sea', [-1300, -800, 1300, 870], 1.12, (g) => {
   engrave(g, SH.rect(-1300, -800, 2600, 880), { tone: TN.vgrad(-560, 70, 0.6, 0.16, 0.03), angle: 0, sp: 6.2, w: 2.4, knock: false });   // dusk sky
   engrave(g, SH.circle(-520, 60, 64), { tone: 0.03, knock: '#fbf1d6', line: 1 });
   const sea = SH.rect(-1300, 70, 2600, 800);
-  engrave(g, sea, { tone: (x, y) => 0.36 + 0.36 * clamp((y - 70) / 450) - 0.3 * Math.max(0, 1 - Math.abs(x + 520) / 160) * clamp(1 - (y - 70) / 300) + 0.1 * Math.sin(x * 0.02 + y * 0.35 - t * 2), angle: 0, sp: 5.2, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.45 });
+  engrave(g, sea, { tone: (x, y) => 0.36 + 0.36 * clamp((y - 70) / 450) - 0.3 * Math.max(0, 1 - Math.abs(x + 520) / 160) * clamp(1 - (y - 70) / 300) + 0.1 * Math.sin(x * 0.02 + y * 0.35), angle: 0, sp: 5.2, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.45 });
+  });
   const sx = 330 + (t - CUES.sea) * 14;
   ship(g, sx, 52, t, 0.14);
   for (let i = 0; i < 4; i++) engrave(g, SH.circle(sx - 60 - i * 26, 22 - i * 8, 6 + i * 4), { tone: 0.4 - i * 0.08, angle: 40, sp: 3, w: 1, knock: false });
