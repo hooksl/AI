@@ -26,3 +26,6 @@ __pycache__/
 # brand fonts supplied by the user stay local
 fonts/
 logs/*.raw
+logs/*.log
+logs/*.txt
+logs/make.running
