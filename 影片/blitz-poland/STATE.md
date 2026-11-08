@@ -2,7 +2,7 @@
 
 Read this first in a new session, after loading the cinecode skill (Claude Code: the Skill tool, never a plain read of SKILL.md), then `python3 /home/user/AI/.claude/skills/cinecode/scripts/init_film.py . --update-tools` silently (the kit's newest tools). Kit: /home/user/AI/.claude/skills/cinecode · Method: `/home/user/AI/.claude/skills/cinecode/references/quick-mode.md`
 
-- **Phase:** 4 Draft  <!-- 1 Questions · 1b Research (if chosen) · 2 The card (text gate) · 3 Two scenes as stills (gate) · 3b The rest · 4 Draft · 5 Revisions on drafts (max 2) · 6 Final render · delivered -->
+- **Phase:** delivered  <!-- 1 Questions · 1b Research (if chosen) · 2 The card (text gate) · 3 Two scenes as stills (gate) · 3b The rest · 4 Draft · 5 Revisions on drafts (max 2) · 6 Final render · delivered -->
 - **Format source:** <none · saved format name (FORMAT.md)>
 - **Mode:** Quick (user)
 - **Purpose:** cinematic (user) (`/home/user/AI/.claude/skills/cinecode/references/purpose-<cinematic|ad>.md`)
@@ -26,7 +26,7 @@ Read this first in a new session, after loading the cinecode skill (Claude Code:
 - **Open notes:** none yet · intentional: S6 (40-46) is the scripted silence before the duet, quieter by design; S4 and S8 sit on quieter passages of the recording
 - **Revision round:** 1 of 2 (notes/round-1.md) <!-- a re-plan (new scenes or a new length) is shown as a new plan + one still per scene; it does not count as a round -->
 - **Re-plans:** <none · date: what changed, stills approved>
-- **Next action:** make.py final (viewer v10: no red items; polish left: Latin line larger, ending ship larger)
+- **Next action:** delivered 闪击波兰.mp4 (renders/film-v3.mp4, copied by hand: make.py's sound gate SOUND BURIED / SOUND ALL CODE kept holding; the user chose to deliver as is). Then: clean-up question, save-format question
 
 ## Log
 | Date | What | File |
