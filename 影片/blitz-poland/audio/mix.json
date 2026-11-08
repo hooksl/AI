@@ -11,7 +11,7 @@
   {
    "file": "audio/sfx/convoy-engines.wav",
    "at": 4.8,
-   "gain_db": -6,
+   "gain_db": -10,
    "fade_in": 0.2,
    "fade_out": 0.5,
    "bus": "ambience"
@@ -23,7 +23,7 @@
     0.09,
     2.7
    ],
-   "gain_db": 3,
+   "gain_db": 1,
    "pan": 0.3,
    "bus": "sfx"
   },
@@ -34,7 +34,7 @@
     0.1,
     1.57
    ],
-   "gain_db": 5,
+   "gain_db": 3,
    "pan": 0.15,
    "bus": "sfx"
   },
@@ -45,14 +45,14 @@
     0.09,
     2.7
    ],
-   "gain_db": 2,
+   "gain_db": 0,
    "pan": 0.4,
    "bus": "sfx"
   },
   {
    "file": "audio/sfx/train-chuff.wav",
    "at": 24.9,
-   "gain_db": -8,
+   "gain_db": -5,
    "fade_out": 0.4,
    "bus": "foley",
    "trim": [
@@ -75,7 +75,7 @@
   {
    "file": "audio/sfx/tank-treads.wav",
    "at": 46.0,
-   "gain_db": -9,
+   "gain_db": -12,
    "fade_in": 0.3,
    "fade_out": 0.6,
    "bus": "ambience"
@@ -97,7 +97,7 @@
     5.11,
     5.9
    ],
-   "gain_db": 0,
+   "gain_db": -2,
    "fade_out": 0.2,
    "bus": "foley"
   },

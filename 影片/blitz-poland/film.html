@@ -73,7 +73,7 @@ const TYPE = {
 
 // Cues: measured onsets of the recording (logs: onsets of segment A and the coda), shared by picture and sound.
 const CUES = {
-  lid: 0.05, nail1: 1.40, nail2: 2.62, nail3: 3.82, stencil: 4.10,
+  lid: 0.05, nail1: 1.40, nail2: 2.62, nail3: 3.82, stencil: 3.95,
   road: 4.80, bomb1: 7.07, bomb2: 8.85, swerve: 9.17, bomb3: 10.27,
   map: 12.10, west: 14.85, westB: 16.00,
   station: 21.30, bridge: 27.02, border: 29.22,
@@ -105,14 +105,14 @@ const SFX = [
   { at: CUES.nail2 + 0.01, voice: 'tick', gain: 0.3, wet: 0.3 },
   { at: CUES.nail3, voice: 'hit', gain: 0.96, wet: 0.3 },
   { at: CUES.nail3, voice: 'foley', kind: 'tap', gain: 1.0, wet: 0.3 },
-  { at: 4.10, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.19, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 3.95, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.00, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.06, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.12, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.17, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.23, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: 4.28, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.37, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.46, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.55, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.64, voice: 'tick', gain: 0.12, wet: 0.1 },
-  { at: 4.73, voice: 'tick', gain: 0.12, wet: 0.1 },
+  { at: 4.33, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: CUES.swerve, voice: 'air', dur: 0.9, gain: 0.25, wet: 0.1 },
   { at: CUES.map, voice: 'foley', kind: 'cloth', gain: 0.72, wet: 0.15 },
   { at: 12.70, voice: 'tick', gain: 0.08, wet: 0.1 },
@@ -140,7 +140,7 @@ const SFX = [
   { at: CUES.hoist + 0.18, voice: 'foley', kind: 'tap', gain: 0.48, wet: 0.3 },
   { at: CUES.hoist + 1.6, voice: 'foley', kind: 'tap', gain: 0.56, wet: 0.3 },
   { at: CUES.turn, voice: 'foley', kind: 'cloth', gain: 0.64, wet: 0.2 },
-  { at: CUES.east, voice: 'hit', gain: 0.64, wet: 0.5 },
+  { at: CUES.east, voice: 'hit', gain: 0.45, wet: 0.5 },
   { at: CUES.chords[0], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
   { at: CUES.chords[1], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
   { at: CUES.chords[2], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
@@ -372,7 +372,7 @@ function crateNailed(g, k, t, S) {
   // pan, 4.8 s, ease-out, left to right across the crate, with a slow 6% push
   const cam = { x: lerp(-110, 90, EASE.out(k)), y: lerp(10, -10, k), z: lerp(1.04, 1.1, EASE.inOut(k)) };
   const nails = [CUES.nail1, CUES.nail2, CUES.nail3], hitAge = Math.min(...nails.map((c) => (t >= c ? t - c : 9)));
-  const jolt = hitAge < 0.25 ? Math.sin(hitAge * 60) * 6 * (1 - hitAge / 0.25) : 0;
+  const jolt = hitAge < 0.25 ? Math.sin(hitAge * 60) * 2.2 * (1 - hitAge / 0.25) : 0;
   stage(g, S, { ...cam, y: cam.y + jolt * 0.4 });
   const X0 = -620, Y0 = -330, CW = 1240, CH = 660, rim = 46;
   cached(g, S, 's1base', [-1300, -800, 1300, 800], 1.12, (g) => {
@@ -397,7 +397,7 @@ function crateNailed(g, k, t, S) {
     for (const bx of [X0 + 120, X0 + CW - 190]) plank(g, bx, Y0 - 6, 70, CH + 12, 30 + bx, 0.46);
   });
   // stencil, cut letter by letter once the nails are in
-  cutText(g, S, 'BANK POLSKI', X0 + CW / 2, Y0 + CH / 2 + 34, 92, clamp((t - CUES.stencil) / 0.7), { role: 'text', weight: 700, world: true, align: 'center', track: 0.18, color: '#2a1d14' });
+  cutText(g, S, 'BANK POLSKI', X0 + CW / 2, Y0 + CH / 2 + 34, 92, clamp((t - CUES.stencil) / 0.45), { role: 'text', weight: 700, world: true, align: 'center', track: 0.18, color: '#2a1d14' });
   // nail heads appear on their strike
   const nx = [X0 + 155, X0 + CW / 2, X0 + CW - 155];
   nails.forEach((c, i) => {
@@ -814,12 +814,15 @@ function portDawn(g, k, t, S) {
   for (let i = 0; i < 5; i++) { const ph = (t * 0.5 + i / 5) % 1; engrave(g, SH.circle(sx - 340 - ph * 260, 180 - 190 - ph * 160, 20 + ph * 60), { tone: 0.5 * (1 - ph), angle: 50, sp: 5, w: 1.8, knock: false }); }  // funnel smoke
   // the crane: tower, jib swinging over the hold, the crate load on its cable
   const swing = EASE.inOut(clamp((t - CUES.hoist) / 3.2)), lift = Math.sin(clamp((t - CUES.hoist) / 3.4) * Math.PI);
-  const ja = lerp(-0.25, 0.08, swing), L = 760, jx = -740 + Math.cos(ja) * L, jy = -330 + Math.sin(ja) * L * 0.3;
+  const ja = lerp(-0.25, 0.08, swing), L = 836, jx = -740 + Math.cos(ja) * L, jy = -330 + Math.sin(ja) * L * 0.3;
   g.save(); g.strokeStyle = INK; g.lineWidth = 9; g.beginPath(); g.moveTo(-740, -330); g.lineTo(jx, jy); g.stroke(); g.lineWidth = 2; g.beginPath(); g.moveTo(-740, -420); g.lineTo(jx, jy); g.stroke();
-  const cy = lerp(160, -40, lift) - 40 * swing;
-  g.lineWidth = 2; g.beginPath(); g.moveTo(jx, jy); g.lineTo(jx, cy - 60); g.stroke(); g.restore();
-  engrave(g, SH.rect(jx - 70, cy - 60, 140, 90), { tone: TN.lit(jx, cy, 90, 0.38, 0.3), angle: 0, sp: 4.4, w: 2, line: 2 });
-  engrave(g, SH.rect(jx - 60, cy - 30, 120, 6), { tone: 0.2, knock: false, wash: PALETTE.accent, washA: 0.5 });
+  // the load is set down on the deck at tL; the hook lets go and rises empty, the crate leaves with the ship
+  const tL = CUES.hoist + 3.4, landed = t >= tL, cy = landed ? 120 : lerp(160, -40, lift) - 40 * swing;
+  const bx = landed ? jx + (sx - 260) : jx, hookY = landed ? lerp(cy - 60, jy + 40, EASE.out(clamp((t - tL) / 0.9))) : cy - 60;
+  g.lineWidth = 2; g.beginPath(); g.moveTo(jx, jy); g.lineTo(jx, hookY); g.stroke();
+  g.lineWidth = 4; g.beginPath(); g.arc(jx, hookY + 8, 8, 0, Math.PI); g.stroke(); g.restore();
+  engrave(g, SH.rect(bx - 70, cy - 60, 140, 90), { tone: TN.lit(bx, cy, 90, 0.38, 0.3), angle: 0, sp: 4.4, w: 2, line: 2 });
+  engrave(g, SH.rect(bx - 60, cy - 30, 120, 6), { tone: 0.2, knock: false, wash: PALETTE.accent, washA: 0.5 });
   for (let i = 0; i < 4; i++) gull(g, -200 + i * 230 + Math.sin(t * 0.7 + i) * 60, -300 + i * 30 + Math.cos(t * 0.9 + i) * 30, t, 1.2);
   caption(g, S, 'CONSTANȚA', '康斯坦察', clamp((t - CUES.port - 0.5) / 1.6), { x: 1824, align: 'right' });
   plateFrame(g, S);

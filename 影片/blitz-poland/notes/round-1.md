@@ -9,3 +9,7 @@
 - Viewer: S6 map labels get a paper halo; zoom 1.55-1.9 → 1.3-1.6 so the north stays in frame; hit 0.6 → 0.4 (harsh band).
 - Machine: train chuff at 24.69 (was 0.21 s late); sfx +3 dB and the music 0.85 → 0.6 (effects were 13 dB under the music).
 - Machine (draft v3 check): effects still 12 dB under the music → music 0.6 → 0.4, code hits and foley ×1.6, recorded sfx +3 dB, paper +4 dB; train chuff trimmed 0.21 s.
+- Viewer v4 (red): the crate stayed on the crane rope and hung in the air as the ship left → it is set down at hoist + 3.4 s, rides the ship; the hook rises empty.
+- Viewer v4: S1 strikes read as cuts → nail jolt 6 → 2.2; stencil cut 3.95-4.40, held to 4.80.
+- Viewer v4: loudness → engines -4 dB, explosions -2, treads -3, train +3, east hit 0.64 → 0.45, paper at 40 s -2.
+- Crane jib 760 → 836 so the crate lands clear of the funnel.
