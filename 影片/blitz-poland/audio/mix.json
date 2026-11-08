@@ -81,23 +81,23 @@
    "bus": "ambience"
   },
   {
-   "file": "audio/sfx/paper.wav",
+   "file": "audio/sfx/paper-soft.wav",
    "at": 12.1,
    "trim": [
     3.85,
     4.17
    ],
-   "gain_db": -2,
+   "gain_db": 0,
    "bus": "foley"
   },
   {
-   "file": "audio/sfx/paper.wav",
+   "file": "audio/sfx/paper-soft.wav",
    "at": 40.0,
    "trim": [
     5.11,
     5.9
    ],
-   "gain_db": -2,
+   "gain_db": -4,
    "fade_out": 0.2,
    "bus": "foley"
   },
@@ -112,14 +112,10 @@
    "bus": "foley"
   },
   {
-   "file": "audio/sfx/paper.wav",
-   "at": 56.05,
-   "trim": [
-    1.71,
-    1.75
-   ],
-   "gain_db": -10,
-   "bus": "foley"
+   "file": "audio/sfx/thud.wav",
+   "at": 43.0,
+   "gain_db": 0,
+   "bus": "sfx"
   }
  ]
 }

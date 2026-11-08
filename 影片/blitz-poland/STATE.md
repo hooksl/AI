@@ -26,7 +26,7 @@ Read this first in a new session, after loading the cinecode skill (Claude Code:
 - **Open notes:** none yet · intentional: S6 (40-46) is the scripted silence before the duet, quieter by design; S4 and S8 sit on quieter passages of the recording
 - **Revision round:** 1 of 2 (notes/round-1.md) <!-- a re-plan (new scenes or a new length) is shown as a new plan + one still per scene; it does not count as a round -->
 - **Re-plans:** <none · date: what changed, stills approved>
-- **Next action:** draft v3 with round-1 fixes, viewer v3, then make.py final (the user chose the final)
+- **Next action:** make.py final (viewer v10: no red items; polish left: Latin line larger, ending ship larger)
 
 ## Log
 | Date | What | File |
