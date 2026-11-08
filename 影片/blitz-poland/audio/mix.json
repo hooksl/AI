@@ -114,8 +114,9 @@
   {
    "file": "audio/sfx/thud.wav",
    "at": 43.0,
-   "gain_db": 0,
-   "bus": "sfx"
+   "gain_db": -9,
+   "bus": "sfx",
+   "fade_out": 0.6
   }
  ]
 }

@@ -17,3 +17,6 @@
 - 40-46 s still +5.9 dB harsh: its room-noise bed was the high band → bed 'air' at 0.008 (near silence, as scripted).
 - 40-46 s: the code hit (bright transient) → a recorded distant thud low-passed at 420 Hz; paper -4 dB.
 - 56-60 s harsh +4.1 dB: paper flick removed, title ticks 0.1 → 0.05.
+- Viewer v10 (no red): Latin line 44 → 62 px; ending ship 0.28 → 0.5, drifting 40 px/s.
+- Viewer v12 (red): the turn's thud made 40-46 s the loudest scene → thud -9 dB with a fade; maps zoomed out (S3 1.14, S6 1.05-1.25); Brest push-in 13% from 50 s.
+- Viewer v14 (red): the thud led the east front by 0.7 s → the front now starts at the map's east edge 0.5 s before the thud.

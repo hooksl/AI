@@ -1,0 +1,122 @@
+{
+ "duration": 60.0,
+ "out": "audio/mix-draft-v14.wav",
+ "layers": [
+  {
+   "file": "audio/film.wav",
+   "at": 0.0,
+   "gain_db": 4,
+   "bus": "music"
+  },
+  {
+   "file": "audio/sfx/convoy-engines.wav",
+   "at": 4.8,
+   "gain_db": -10,
+   "fade_in": 0.2,
+   "fade_out": 0.5,
+   "bus": "ambience"
+  },
+  {
+   "file": "audio/sfx/explosion.wav",
+   "at": 7.07,
+   "trim": [
+    0.09,
+    2.7
+   ],
+   "gain_db": 1,
+   "pan": 0.3,
+   "bus": "sfx"
+  },
+  {
+   "file": "audio/sfx/explosion2.wav",
+   "at": 8.85,
+   "trim": [
+    0.1,
+    1.57
+   ],
+   "gain_db": 3,
+   "pan": 0.15,
+   "bus": "sfx"
+  },
+  {
+   "file": "audio/sfx/explosion.wav",
+   "at": 10.27,
+   "trim": [
+    0.09,
+    2.7
+   ],
+   "gain_db": 0,
+   "pan": 0.4,
+   "bus": "sfx"
+  },
+  {
+   "file": "audio/sfx/train-chuff.wav",
+   "at": 24.9,
+   "gain_db": -5,
+   "fade_out": 0.4,
+   "bus": "foley",
+   "trim": [
+    0.21,
+    6.4
+   ]
+  },
+  {
+   "file": "audio/sfx/ship-horn.wav",
+   "at": 36.05,
+   "trim": [
+    0.49,
+    3.9
+   ],
+   "gain_db": 0,
+   "fade_out": 0.8,
+   "pan": 0.2,
+   "bus": "sfx"
+  },
+  {
+   "file": "audio/sfx/tank-treads.wav",
+   "at": 46.0,
+   "gain_db": -12,
+   "fade_in": 0.3,
+   "fade_out": 0.6,
+   "bus": "ambience"
+  },
+  {
+   "file": "audio/sfx/paper-soft.wav",
+   "at": 12.1,
+   "trim": [
+    3.85,
+    4.17
+   ],
+   "gain_db": 0,
+   "bus": "foley"
+  },
+  {
+   "file": "audio/sfx/paper-soft.wav",
+   "at": 40.0,
+   "trim": [
+    5.11,
+    5.9
+   ],
+   "gain_db": -4,
+   "fade_out": 0.2,
+   "bus": "foley"
+  },
+  {
+   "file": "audio/sfx/paper.wav",
+   "at": 0.05,
+   "trim": [
+    2.19,
+    2.46
+   ],
+   "gain_db": -4,
+   "bus": "foley"
+  },
+  {
+   "file": "audio/sfx/thud.wav",
+   "at": 43.0,
+   "gain_db": -9,
+   "bus": "sfx",
+   "fade_out": 0.6
+  }
+ ]
+}
