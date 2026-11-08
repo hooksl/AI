@@ -1,6 +1,0 @@
-file '/home/user/AI/影片/blitz-poland/review/stills-12/001022.jpg'
-duration 1
-file '/home/user/AI/影片/blitz-poland/review/stills-12/001032.jpg'
-duration 1
-file '/home/user/AI/影片/blitz-poland/review/stills-12/001042.jpg'
-duration 1
