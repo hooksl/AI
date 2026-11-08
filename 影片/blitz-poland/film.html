@@ -36,7 +36,7 @@
 // the file, so a top-level rng() call here would run before it.
 
 // ============================== FILM ==============================
-const TITLE = '闪电波兰';
+const TITLE = '闪击波兰';
 // Purpose (SKILL.md "First questions"): 'cinematic' or 'ad'.
 const PURPOSE = 'cinematic';
 // Look: the film draws its own copperplate engraving (styles/engraving.md); the family below only sets the frame pass.
@@ -54,7 +54,7 @@ const BEAT0 = 0;
 const beat = (n) => BEAT0 + n * 60 / BPM, bar = (n) => beat(4 * n);
 // Chopin, Scherzo No. 3 Op. 39 (La Pianista, public domain): 20.38-60.6 s of the recording on 0-40, a scripted
 // silence on 40-46, the coda 433.5-447.5 s on 46-60 (audio/music.wav, cut by ffmpeg from assets/music).
-const OWN_MUSIC = { file: 'audio/music.wav', gain: 0.85 };
+const OWN_MUSIC = { file: 'audio/music.wav', gain: 0.4 };
 const INSTRUMENTS = [];
 const CAST = {};
 const FORMULAS = {};
@@ -67,7 +67,7 @@ const TYPE = {
     text: { family: 'Bodoni Moda', pkg: 'bodoni-moda', version: '5.3.0', weights: [500, 700] },
     mono: null,
   },
-  check: { strings: { display: ['华沙', '八十吨黄金 向南', '西线', '越过边境', '康斯坦察', '东线', '布列斯特 联合阅兵', '闪电波兰'],
+  check: { strings: { display: ['华沙', '八十吨黄金 向南', '西线', '越过边境', '康斯坦察', '东线', '德苏联合阅兵', TITLE],
     text: ['WARSZAWA ŁUCK ŚNIATYŃ CONSTANȚA BRZEŚĆ IX.1939'] }, sizes: { display: 0.05, text: 0.03 } },
 };
 
@@ -98,13 +98,13 @@ const SCENES = [
 ];
 
 const SFX = [
-  { at: 0.05, voice: 'foley', kind: 'cloth', gain: 0.5, wet: 0.2 },
-  { at: CUES.nail1, voice: 'hit', gain: 0.55, wet: 0.3 },
-  { at: CUES.nail1, voice: 'foley', kind: 'tap', gain: 0.6, wet: 0.3 },
-  { at: CUES.nail2, voice: 'foley', kind: 'tap', gain: 0.65, wet: 0.3 },
+  { at: 0.05, voice: 'foley', kind: 'cloth', gain: 0.8, wet: 0.2 },
+  { at: CUES.nail1, voice: 'hit', gain: 0.88, wet: 0.3 },
+  { at: CUES.nail1, voice: 'foley', kind: 'tap', gain: 0.96, wet: 0.3 },
+  { at: CUES.nail2, voice: 'foley', kind: 'tap', gain: 1.0, wet: 0.3 },
   { at: CUES.nail2 + 0.01, voice: 'tick', gain: 0.3, wet: 0.3 },
-  { at: CUES.nail3, voice: 'hit', gain: 0.6, wet: 0.3 },
-  { at: CUES.nail3, voice: 'foley', kind: 'tap', gain: 0.7, wet: 0.3 },
+  { at: CUES.nail3, voice: 'hit', gain: 0.96, wet: 0.3 },
+  { at: CUES.nail3, voice: 'foley', kind: 'tap', gain: 1.0, wet: 0.3 },
   { at: 4.10, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: 4.19, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: 4.28, voice: 'tick', gain: 0.12, wet: 0.1 },
@@ -114,7 +114,7 @@ const SFX = [
   { at: 4.64, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: 4.73, voice: 'tick', gain: 0.12, wet: 0.1 },
   { at: CUES.swerve, voice: 'air', dur: 0.9, gain: 0.25, wet: 0.1 },
-  { at: CUES.map, voice: 'foley', kind: 'cloth', gain: 0.45, wet: 0.15 },
+  { at: CUES.map, voice: 'foley', kind: 'cloth', gain: 0.72, wet: 0.15 },
   { at: 12.70, voice: 'tick', gain: 0.08, wet: 0.1 },
   { at: 13.20, voice: 'tick', gain: 0.08, wet: 0.1 },
   { at: 13.70, voice: 'tick', gain: 0.08, wet: 0.1 },
@@ -131,28 +131,28 @@ const SFX = [
   { at: 19.20, voice: 'tick', gain: 0.08, wet: 0.1 },
   { at: 19.70, voice: 'tick', gain: 0.08, wet: 0.1 },
   { at: 20.20, voice: 'tick', gain: 0.08, wet: 0.1 },
-  { at: CUES.west, voice: 'hit', gain: 0.35, wet: 0.4 },
+  { at: CUES.west, voice: 'hit', gain: 0.56, wet: 0.4 },
   { at: CUES.station, voice: 'air', dur: 1.6, gain: 0.3, wet: 0.2 },
-  { at: CUES.bridge, voice: 'foley', kind: 'step', gain: 0.6, wet: 0.4 },
-  { at: CUES.border, voice: 'foley', kind: 'tap', gain: 0.55, wet: 0.3 },
-  { at: CUES.port, voice: 'foley', kind: 'cloth', gain: 0.25, wet: 0.2 },
-  { at: CUES.hoist, voice: 'foley', kind: 'tap', gain: 0.4, wet: 0.3 },
-  { at: CUES.hoist + 0.18, voice: 'foley', kind: 'tap', gain: 0.3, wet: 0.3 },
-  { at: CUES.hoist + 1.6, voice: 'foley', kind: 'tap', gain: 0.35, wet: 0.3 },
-  { at: CUES.turn, voice: 'foley', kind: 'cloth', gain: 0.4, wet: 0.2 },
-  { at: CUES.east, voice: 'hit', gain: 0.6, wet: 0.5 },
-  { at: CUES.chords[0], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[1], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[2], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[3], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[4], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[5], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[6], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[7], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[8], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[9], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[10], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
-  { at: CUES.chords[11], voice: 'foley', kind: 'step', gain: 0.5, wet: 0.3 },
+  { at: CUES.bridge, voice: 'foley', kind: 'step', gain: 0.96, wet: 0.4 },
+  { at: CUES.border, voice: 'foley', kind: 'tap', gain: 0.88, wet: 0.3 },
+  { at: CUES.port, voice: 'foley', kind: 'cloth', gain: 0.4, wet: 0.2 },
+  { at: CUES.hoist, voice: 'foley', kind: 'tap', gain: 0.64, wet: 0.3 },
+  { at: CUES.hoist + 0.18, voice: 'foley', kind: 'tap', gain: 0.48, wet: 0.3 },
+  { at: CUES.hoist + 1.6, voice: 'foley', kind: 'tap', gain: 0.56, wet: 0.3 },
+  { at: CUES.turn, voice: 'foley', kind: 'cloth', gain: 0.64, wet: 0.2 },
+  { at: CUES.east, voice: 'hit', gain: 0.64, wet: 0.5 },
+  { at: CUES.chords[0], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[1], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[2], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[3], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[4], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[5], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[6], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[7], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[8], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[9], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[10], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
+  { at: CUES.chords[11], voice: 'foley', kind: 'step', gain: 0.8, wet: 0.3 },
   { at: 57.00, voice: 'tick', gain: 0.1, wet: 0.2 },
   { at: 57.32, voice: 'tick', gain: 0.1, wet: 0.2 },
   { at: 57.64, voice: 'tick', gain: 0.1, wet: 0.2 },
@@ -296,8 +296,8 @@ function cutText(g, S, str, x, y, px, k, o = {}) {
     const p = clamp((k - (i / n) * spread) / (1 - spread));
     if (p > 0) {
       g.save(); g.beginPath(); g.rect(cx - 2, y - px * 1.2, (ws[i] + 4) * EASE.out(p), px * 1.6); g.clip();
+      if (o.halo) { g.strokeStyle = o.halo; g.lineWidth = px * 0.24; g.lineJoin = 'round'; g.strokeText(c, cx, y); }
       g.fillText(c, cx, y); g.restore();
-      if (p < 1 && c.trim()) { g.fillStyle = '#fff8e0'; g.beginPath(); g.arc(cx + ws[i] * EASE.out(p), y - px * 0.35, px * 0.05, 0, TAU); g.fill(); g.fillStyle = o.color ?? INK; }
     }
     cx += ws[i] + gap;
   });
@@ -522,7 +522,7 @@ function brestParade(g, k, t, S) {
     const x = (t - c) * v;
     if (x > -1500 && x < 1500) tank(g, i % 2 ? 'bt' : 'pz', x, 318, t);
   });
-  caption(g, S, 'BRZEŚĆ · 22.IX.1939', '布列斯特 联合阅兵', clamp((t - CUES.brest - 0.4) / 1.6), { x: DW / 2, align: 'center', y: 210 });
+  caption(g, S, 'BRZEŚĆ · 22.IX.1939', '德苏联合阅兵', clamp((t - CUES.brest - 0.4) / 1.6), { x: DW / 2, align: 'center', y: 210 });
   plateFrame(g, S);
 }
 
@@ -651,7 +651,7 @@ function mapPlate(g, S, t, o) {               // o: { west 0..1, east 0..1, rout
   for (const [name, [a, b]] of Object.entries(CITIES)) {
     const [x, y] = geo(a, b); engrave(g, SH.circle(x, y, 9), { tone: 0.8, angle: 0, sp: 2.4, w: 1.4, line: 1.2 });
     const lo = name === 'BRZEŚĆ' ? [18, -14] : name === 'WARSZAWA' ? [-18, -14] : name === 'LUBLIN' ? [-18, 34] : name === 'ŁUCK' ? [18, 34] : [18, -12];
-    cutText(g, S, name, x + lo[0], y + lo[1], 30, 1, { role: 'text', world: true, track: 0.14, weight: 700, align: lo[0] < 0 ? 'right' : 'left' });
+    cutText(g, S, name, x + lo[0], y + lo[1], 30, 1, { role: 'text', world: true, track: 0.14, weight: 700, halo: '#f3ead2', align: lo[0] < 0 ? 'right' : 'left' });
   }
   const tip = pts[pts.length - 1];
   if (o.dot) {
@@ -681,7 +681,7 @@ function routeCut(g, k, t, S) {
 function eastCloses(g, k, t, S) {
   // locked frame on the plate; the east front closes the road the gold took, in silence
   const c0 = geo(25.0, 49.9), pz = EASE.inOut(clamp((t - CUES.turn) / 6));
-  stage(g, S, { x: c0[0] * 0.8 + 20 * pz, y: c0[1] * 0.8 - 30 * pz, z: lerp(1.55, 1.9, pz) });
+  stage(g, S, { x: c0[0] * 0.6 + 20 * pz, y: c0[1] * 0.5 - 20 * pz, z: lerp(1.3, 1.6, pz) });
   const tip = mapPlate(g, S, t, { west: 0.55 + 0.45 * EASE.inOut(clamp((t - CUES.turn) / 5.2)), east: EASE.out(clamp((t - CUES.east) / 2.6)), route: 1, romania: 1, dot: false });
   burst(g, geo(27.4, 51.2)[0], geo(27.4, 51.2)[1], (t - CUES.east) / 0.4, 30, 160, 13, 3);
   caption(g, S, '17.IX.1939', '东线', clamp((t - CUES.east - 0.2) / 1.4), { x: 1824, align: 'right', y: 250 });
@@ -836,11 +836,11 @@ function seaGlint(g, k, t, S) {
   const sea = SH.rect(-1300, 70, 2600, 800);
   engrave(g, sea, { tone: (x, y) => 0.36 + 0.36 * clamp((y - 70) / 450) - 0.3 * Math.max(0, 1 - Math.abs(x + 520) / 160) * clamp(1 - (y - 70) / 300) + 0.1 * Math.sin(x * 0.02 + y * 0.35), angle: 0, sp: 5.2, w: 2.2, knock: false, wash: PALETTE.dim, washA: 0.45 });
   });
-  const sx = 330 + (t - CUES.sea) * 14;
-  ship(g, sx, 52, t, 0.14);
-  for (let i = 0; i < 4; i++) engrave(g, SH.circle(sx - 60 - i * 26, 22 - i * 8, 6 + i * 4), { tone: 0.4 - i * 0.08, angle: 40, sp: 3, w: 1, knock: false });
+  const sx = 300 + (t - CUES.sea) * 34;
+  ship(g, sx, 46, t, 0.28);
+  for (let i = 0; i < 5; i++) { const ph = (t * 0.4 + i / 5) % 1; engrave(g, SH.circle(sx - 100 - ph * 140, -10 - ph * 50, 8 + ph * 18), { tone: 0.4 * (1 - ph), angle: 40, sp: 4, w: 1.2, knock: false }); }
   const gk = clamp((t - CUES.sea - 0.6) / 0.5), gw = gk * (0.75 + 0.25 * Math.sin(t * 5));   // one gold glint at the ship
-  if (gk > 0) { engrave(g, SH.circle(sx + 10, 44, 7 * gw + 2), { tone: 0.15, knock: '#fff4cf', wash: PALETTE.accent, washA: 0.95, line: 1 }); burst(g, sx + 10, 44, 0.35 + 0.1 * Math.sin(t * 3), 10, 52, 8, 2.2 * gw); }
+  if (gk > 0) { engrave(g, SH.circle(sx + 20, 34, 9 * gw + 3), { tone: 0.15, knock: '#fff4cf', wash: PALETTE.accent, washA: 0.95, line: 1 }); burst(g, sx + 20, 34, 0.35 + 0.1 * Math.sin(t * 3), 14, 70, 8, 2.4 * gw); }
   cutText(g, S, TITLE, DW / 2, 380, 150, clamp((t - 57.0) / 1.4), { role: 'display', align: 'center', track: 0.3 });
   plateFrame(g, S);
 }

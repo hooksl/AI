@@ -1,4 +1,4 @@
-# State: 闪电波兰 / Blitz Poland (Quick mode)
+# State: 闪击波兰 / Blitz Poland (Quick mode)
 
 Read this first in a new session, after loading the cinecode skill (Claude Code: the Skill tool, never a plain read of SKILL.md), then `python3 /home/user/AI/.claude/skills/cinecode/scripts/init_film.py . --update-tools` silently (the kit's newest tools). Kit: /home/user/AI/.claude/skills/cinecode · Method: `/home/user/AI/.claude/skills/cinecode/references/quick-mode.md`
 
@@ -24,9 +24,9 @@ Read this first in a new session, after loading the cinecode skill (Claude Code:
 - **Sound design:** <ambience per scene · SFX cues · ROOM · arrangement (sections × parts) · lead timbre>
 - **Last output:** renders/draft-v2.mp4 (half size, delivered as 闪电波兰-draft.mp4) · checks: hook PASS · flags: S8 nearly still, sound buried 13 dB under the music at hits, most event sounds code (9 recorded), train chuff 0.21 s late
 - **Open notes:** none yet · intentional: S6 (40-46) is the scripted silence before the duet, quieter by design; S4 and S8 sit on quieter passages of the recording
-- **Revision round:** 0 of 2 <!-- a re-plan (new scenes or a new length) is shown as a new plan + one still per scene; it does not count as a round -->
+- **Revision round:** 1 of 2 (notes/round-1.md) <!-- a re-plan (new scenes or a new length) is shown as a new plan + one still per scene; it does not count as a round -->
 - **Re-plans:** <none · date: what changed, stills approved>
-- **Next action:** delivery question on draft v2 (Final / Notes / Jury); read review/critique-v2.md first when the user answers
+- **Next action:** draft v3 with round-1 fixes, viewer v3, then make.py final (the user chose the final)
 
 ## Log
 | Date | What | File |
